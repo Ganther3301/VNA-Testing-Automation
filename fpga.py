@@ -5,13 +5,13 @@ import time
 
 class FPGA:
     def __init__(self, baudrate=9600, timeout=1):
-        self.connected = False
+        self.connected = True  # TODO
         self.port = None
         self.baudrate = baudrate
         self.timeout = timeout
 
     def initialize_fpga(self):
-        # return
+        # return  # TODO
         keyword = "USB Serial"
         ports = serial.tools.list_ports.comports()
         for port in ports:
@@ -31,18 +31,12 @@ class FPGA:
 
         try:
             with serial.Serial(self.port, self.baudrate, timeout=self.timeout) as ser:
-                # Clear any existing data in the buffer
                 ser.reset_input_buffer()
 
-                # Send the state command
                 ser.write(bytes([state]))
                 ser.flush()
                 print(f"[UART] Triggered Din[{state}]")
 
-                # Wait a moment for the FPGA to process
-                # time.sleep(0.5)
-
-                # Read response with timeout
                 response = ser.read_all().strip()
 
                 if response:

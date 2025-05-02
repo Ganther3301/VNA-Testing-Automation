@@ -6,12 +6,13 @@ import os
 
 class VNA:
     def __init__(self):
-        self.connected = False
+        self.connected = True
         self.instru = None
         self.start_index = None
         self.stop_index = None
 
     def initialize_vna(self):
+        # return  # TODO
         self.rm = visa.ResourceManager()
         for r in self.rm.list_resources():
             try:
@@ -34,6 +35,7 @@ class VNA:
             return
 
     def get_trace_info(self, start_freq=None, stop_freq=None):
+        # return [15.5, 17.5], 'hehe'  # TODO
         freq_points = self.instru.query("TRAC:STIM? CH1DATA").split(',')
         print(freq_points)
         in_gigs = [int(freq_point)/1000000000 for freq_point in freq_points]
@@ -49,11 +51,37 @@ class VNA:
                     f"{in_gigs[0]}-{in_gigs[-1]}_{trace_id_name[i]}.csv")
             elif start_freq != None and stop_freq != None:
                 trace_names.append(
-                    f"{start_freq}-{stop_freq}_{trace_id_name[i]}.csv")                
+                    f"{start_freq}-{stop_freq}_{trace_id_name[i]}.csv")
 
         print(trace_names)
 
         return in_gigs, trace_names
+
+    def save_traces_amp(self, folder_name, start_freq, end_freq):
+        sep = ','
+
+        in_gigs, trace_names = self.get_trace_info(start_freq, end_freq)
+        steps = len(in_gigs)
+
+        trace_values = self.instru.query(
+            "CALCulate1:DATA:ALL? FDAT").split(',')
+        trace_values = list(map(lambda x: float(x), trace_values))
+
+        for i, name in enumerate(trace_names):
+            if name not in os.listdir(folder_name):
+                with open(f'{folder_name}/{name}', mode='w') as f:
+                    for j, v in enumerate(in_gigs):
+                        if v >= start_freq and self.start_index == None:
+                            continue
+
+                        h = str(v) + sep + \
+                            str(trace_values[j+(i*steps)]) + f"{sep}\n"
+                        f.write(h)
+
+                        if v >= end_freq and self.stop_index == None:
+                            break
+
+    # print(instru.write(f"MMEMory:STORe:TRACe:CHANnel ALL, '{save_count}.csv', FORM, LOGPhase"))
 
     def save_traces(self, state, folder_name, start_freq, end_freq):
         sep = ','
@@ -68,7 +96,7 @@ class VNA:
         # for i, name in enumerate(trace_names):
         #     if name not in os.listdir(folder_name):
         #         with open(f'{folder_name}/{name}', mode='w') as f:
-        #           
+        #
 
         #     with open(f'{folder_name}/{name}', mode='a+') as f:
         #         vals = f'{state},' + sep.join(
@@ -112,6 +140,7 @@ class VNA:
                 f.write(vals)
 
     # print(instru.write(f"MMEMory:STORe:TRACe:CHANnel ALL, '{save_count}.csv', FORM, LOGPhase"))
+
 
 if __name__ == '__main__':
     v = VNA()
