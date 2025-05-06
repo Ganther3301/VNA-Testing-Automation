@@ -297,8 +297,9 @@ class MackIITMGUI:
         try:
             self.vna.initialize_vna()
         except:
-            self.log(
-                "[ERROR] Could not locate a VISA implementation", tag='error')
+            pass
+            # self.log(
+            #     "[ERROR] Could not locate a VISA implementation", tag='error')
 
         if self.vna.connected:
             self.log("VNA Successfully Connected", "success")
@@ -431,8 +432,8 @@ class MackIITMGUI:
                         self.log_threadsafe(
                             f"Saved measurement for state {state}", "success")
 
-                    self.vna.start_index = None
-                    self.vna.stop_index = None
+                    self.log_threadsafe("Test completed", "success")
+                    self.vna.reset_indices()
                 else:
                     self.log_threadsafe(
                         "[ERROR] Please upload a CSV file first", 'error')
@@ -459,8 +460,8 @@ class MackIITMGUI:
                         self.log_threadsafe(
                             f"Saved measurement for state {state}", "success")
 
-                        self.vna.start_index = None
-                        self.vna.stop_index = None
+                        self.log_threadsafe("Test completed", "success")
+                        self.vna.reset_indices()
                 except ValueError:
                     self.log_threadsafe(
                         "[ERROR] Enter valid integers.", "error")
@@ -487,15 +488,15 @@ class MackIITMGUI:
                             self.log_threadsafe(
                                 f"Saved measurement for state {state}", "success")
 
-                        self.vna.start_index = None
-                        self.vna.stop_index = None
+                        self.log_threadsafe("Test completed", "success")
+                        self.vna.reset_indices()
                 except ValueError:
                     self.log_threadsafe("[ERROR] Invalid value added", "error")
 
         finally:
             # Always execute this when test finishes (normally or with exception)
             self.test_running = False
-            self.log_threadsafe("Test completed", "success")
+            self.vna.reset_indices()
 
     def log(self, message, tag="info"):
         timestamp = datetime.datetime.now().strftime("[%H:%M:%S] ")

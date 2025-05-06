@@ -1,17 +1,39 @@
 import serial  # type: ignore
 import serial.tools.list_ports  # type: ignore
-import time
 
 
 class FPGA:
+    """
+    A class to interact with an FPGA over serial (UART) connection
+
+    Attributes:
+        connected (bool) : Flag indicating whether FPGA is connected or not.
+        port (str or None) : The port that FPGA is connected to.
+        baudrate (int) : UART communication speed
+        timeout (int) : timeout for operations 
+    """
+
     def __init__(self, baudrate=9600, timeout=1):
-        self.connected = True  # TODO
+        """
+        Initialization Function
+
+        Args:
+            baudrate (int, optional): UART communication speed. Defaults to 9600.
+            timeout (int, optional): Timeout for operations. Defaults to 1.
+        """
+        self.connected = False  # TODO : make it False
         self.port = None
         self.baudrate = baudrate
         self.timeout = timeout
 
     def initialize_fpga(self):
-        # return  # TODO
+        """
+        Scans connected serial ports and checks if FPGA is connected or not
+
+        Returns:
+            bool: Returns True if FPGA is found. Otherwise return False
+        """
+        # return  # TODO : comment it
         keyword = "USB Serial"
         ports = serial.tools.list_ports.comports()
         for port in ports:
@@ -25,6 +47,15 @@ class FPGA:
         return False
 
     def trigger_state(self, state):
+        """
+        Sends a single byte to the FPGA to trigger a single state
+
+        Args:
+            state (int): State that needs to be triggered
+
+        Returns:
+            bool: Returns True if state was successfully triggered. Otherwise False
+        """
         if not self.connected:
             print("[ERROR] No device connected. Call initialize_fpga() first.")
             return False
