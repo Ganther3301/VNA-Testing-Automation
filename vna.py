@@ -22,7 +22,7 @@ class VNA:
         self.instru = None
         self.start_index = None
         self.stop_index = None
-        self.sep = ','
+        self.sep = ","
 
     def initialize_vna(self):
         """
@@ -34,9 +34,9 @@ class VNA:
         for r in self.rm.list_resources():
             try:
                 instru = self.rm.open_resource(r)
-                res = instru.query("*IDN?").split(',')
+                res = instru.query("*IDN?").split(",")
                 instru.query("TRAC:STIM? CH1DATA")
-                if res[0] != 'Rohde-Schwarz':
+                if res[0] != "Rohde-Schwarz":
                     continue
                 self.instru = instru
                 self.connected = True
@@ -65,22 +65,20 @@ class VNA:
                 - List[str]: Corresponding trace names (formatted filenames).
         """
         # return [15.5, 17.5], 'hehe'  # TODO
-        freq_points = self.instru.query("TRAC:STIM? CH1DATA").split(',')
+        freq_points = self.instru.query("TRAC:STIM? CH1DATA").split(",")
         print(freq_points)
-        in_gigs = [int(freq_point)/1000000000 for freq_point in freq_points]
+        in_gigs = [int(freq_point) / 1000000000 for freq_point in freq_points]
 
-        trace_id_name = self.instru.query("CONF:TRAC:CAT?").split(',')
+        trace_id_name = self.instru.query("CONF:TRAC:CAT?").split(",")
         trace_id_name = list(map(lambda x: str(x).strip(), trace_id_name))
         print(trace_id_name)
 
         trace_names = []
         for i in range(1, len(trace_id_name), 2):
             if start_freq == None and stop_freq == None:
-                trace_names.append(
-                    f"{in_gigs[0]}-{in_gigs[-1]}_{trace_id_name[i]}.csv")
+                trace_names.append(f"{in_gigs[0]}-{in_gigs[-1]}_{trace_id_name[i]}.csv")
             elif start_freq != None and stop_freq != None:
-                trace_names.append(
-                    f"{start_freq}-{stop_freq}_{trace_id_name[i]}.csv")
+                trace_names.append(f"{start_freq}-{stop_freq}_{trace_id_name[i]}.csv")
 
         print(trace_names)
 
@@ -98,22 +96,25 @@ class VNA:
         in_gigs, trace_names = self.get_trace_info(start_freq, end_freq)
         steps = len(in_gigs)
 
-        trace_values = self.instru.query(
-            "CALCulate1:DATA:ALL? FDAT").split(',')
+        trace_values = self.instru.query("CALCulate1:DATA:ALL? FDAT").split(",")
         trace_values = list(map(lambda x: float(x), trace_values))
 
         for i, name in enumerate(trace_names):
             if name not in os.listdir(folder_name):
-                with open(f'{folder_name}/{name}', mode='w') as f:
+                with open(f"{folder_name}/{name}", mode="w") as f:
                     for j, v in enumerate(in_gigs):
-                        if v >= start_freq and self.start_index == None:
+                        if v < start_freq:
                             continue
 
-                        h = str(v) + self.sep + \
-                            str(trace_values[j+(i*steps)]) + f"{self.sep}\n"
+                        h = (
+                            str(v)
+                            + self.sep
+                            + str(trace_values[j + (i * steps)])
+                            + f"{self.sep}\n"
+                        )
                         f.write(h)
 
-                        if v >= end_freq and self.stop_index == None:
+                        if v >= end_freq:
                             break
 
     def save_traces(self, state, folder_name, start_freq, end_freq):
@@ -130,13 +131,12 @@ class VNA:
         in_gigs, trace_names = self.get_trace_info(start_freq, end_freq)
         steps = len(in_gigs)
 
-        trace_values = self.instru.query(
-            "CALCulate1:DATA:ALL? FDAT").split(',')
+        trace_values = self.instru.query("CALCulate1:DATA:ALL? FDAT").split(",")
         trace_values = list(map(lambda x: float(x), trace_values))
 
         for i, name in enumerate(trace_names):
             if name not in os.listdir(folder_name):
-                with open(f'{folder_name}/{name}', mode='w') as f:
+                with open(f"{folder_name}/{name}", mode="w") as f:
                     for j, v in enumerate(in_gigs):
                         if v >= start_freq and self.start_index == None:
                             self.start_index = j
@@ -144,17 +144,40 @@ class VNA:
                             self.stop_index = j
                             break
                         elif v > end_freq and self.stop_index == None:
-                            self.stop_index = j-1
+                            self.stop_index = j - 1
                             break
 
-                    h = self.sep + \
-                        self.sep.join(list(map(lambda x: str(x), in_gigs[self.start_index:self.stop_index+1]))
-                                      ) + f'{self.sep}\n'
+                    h = (
+                        self.sep
+                        + self.sep.join(
+                            list(
+                                map(
+                                    lambda x: str(x),
+                                    in_gigs[self.start_index : self.stop_index + 1],
+                                )
+                            )
+                        )
+                        + f"{self.sep}\n"
+                    )
                     f.write(h)
 
-            with open(f'{folder_name}/{name}', mode='a+') as f:
-                vals = f'{state},' + self.sep.join(
-                    list(map(lambda x: str(x), trace_values[self.start_index+(i*steps):(i*steps)+self.stop_index+1]))) + f'{self.sep}\n'
+            with open(f"{folder_name}/{name}", mode="a+") as f:
+                vals = (
+                    f"{state},"
+                    + self.sep.join(
+                        list(
+                            map(
+                                lambda x: str(x),
+                                trace_values[
+                                    self.start_index + (i * steps) : (i * steps)
+                                    + self.stop_index
+                                    + 1
+                                ],
+                            )
+                        )
+                    )
+                    + f"{self.sep}\n"
+                )
                 f.write(vals)
 
     def reset_indices(self):
@@ -165,7 +188,7 @@ class VNA:
         self.stop_index = None
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     v = VNA()
     v.initialize_vna()
     print(v.get_trace_info())
