@@ -1,88 +1,105 @@
 import pyvisa as visa
 import os
+from abc import ABC, abstractmethod
 
 
-class VNA:
+class BaseVNA(ABC):
     """
-    A class to interact with a Vector Network Analyzer (VNA), specifically models from Rohde & Schwarz.
-    Provides functionality to connect to the device, retrieve trace information, and save amplitude or full trace data.
-
-    Attributes:
-        connected (bool): Flag indicating whether the VNA is connected.
-        instru (visa.Resource): VISA instrument resource object representing the connected VNA.
-        start_index (int): Starting index of frequency range to extract.
-        stop_index (int): Ending index of frequency range to extract.
+    Abstract base class for Vector Network Analyzers.
+    Defines the interface that all VNA implementations must follow.
     """
 
     def __init__(self):
         """
-        Initializes the VNA object with connection status, instrument handle, and index placeholders.
+        Initializes the VNA object with common attributes.
         """
-        self.connected = False  # TODO : change it to False
+        self.connected = False
         self.instru = None
         self.start_index = None
         self.stop_index = None
         self.sep = ","
+        self.rm = None
 
     def initialize_vna(self):
         """
-        Attempts to initialize and connect to a Rohde & Schwarz VNA using PyVISA.
+        Attempts to initialize and connect to a VNA using PyVISA.
         Sets the connected attribute to True on success.
         """
-        # return  # TODO : comment this
         self.rm = visa.ResourceManager()
         for r in self.rm.list_resources():
             try:
                 instru = self.rm.open_resource(r)
                 res = instru.query("*IDN?").split(",")
-                instru.query("TRAC:STIM? CH1DATA")
-                if res[0] != "Rohde-Schwarz":
-                    continue
-                self.instru = instru
-                self.connected = True
-                break
-            except:
-                pass
+
+                # Check if this is a VNA we can handle
+                if self.is_compatible_vna(res):
+                    self.instru = instru
+                    self.connected = True
+                    break
+            except Exception as e:
+                # print(f"Error connecting to {r}: {e}")
+                continue
 
         if self.connected:
-            print("Connected successfully")
+            print(f"Connected successfully to {self.get_vendor_name()} VNA")
             return True
         else:
-            print("Couldn't find device")
+            # print("Couldn't find compatible VNA device")
             return False
 
+    @abstractmethod
+    def is_compatible_vna(self, idn_response):
+        """
+        Check if the VNA is compatible with this implementation.
+
+        Args:
+            idn_response (list): Split response from *IDN? query
+
+        Returns:
+            bool: True if compatible, False otherwise
+        """
+        pass
+
+    @abstractmethod
+    def get_vendor_name(self):
+        """
+        Returns the vendor name for this VNA implementation.
+
+        Returns:
+            str: Vendor name
+        """
+        pass
+
+    @abstractmethod
     def get_trace_info(self, start_freq=None, stop_freq=None):
         """
         Retrieves frequency points and trace metadata from the VNA.
 
         Args:
-            start_freq (float, optional): Custom start frequency (in GHz). Used for filename formatting.
-            stop_freq (float, optional): Custom stop frequency (in GHz). Used for filename formatting.
+            start_freq (float, optional): Custom start frequency (in GHz).
+            stop_freq (float, optional): Custom stop frequency (in GHz).
 
         Returns:
-            tuple: A tuple containing:
-                - List[float]: Frequency points in GHz.
-                - List[str]: Corresponding trace names (formatted filenames).
+            tuple: (List[float] frequency points in GHz, List[str] trace names)
         """
-        # return [15.5, 17.5], 'hehe'  # TODO
-        freq_points = self.instru.query("TRAC:STIM? CH1DATA").split(",")
-        print(freq_points)
-        in_gigs = [int(freq_point) / 1000000000 for freq_point in freq_points]
+        pass
 
-        trace_id_name = self.instru.query("CONF:TRAC:CAT?").split(",")
-        trace_id_name = list(map(lambda x: str(x).strip(), trace_id_name))
-        print(trace_id_name)
+    @abstractmethod
+    def get_trace_data(self):
+        """
+        Retrieves all trace data from the VNA.
 
-        trace_names = []
-        for i in range(1, len(trace_id_name), 2):
-            if start_freq == None and stop_freq == None:
-                trace_names.append(f"{in_gigs[0]}-{in_gigs[-1]}_{trace_id_name[i]}.csv")
-            elif start_freq != None and stop_freq != None:
-                trace_names.append(f"{start_freq}-{stop_freq}_{trace_id_name[i]}.csv")
+        Returns:
+            list: Trace values
+        """
+        pass
 
-        print(trace_names)
-
-        return in_gigs, trace_names
+    def reset_indices(self):
+        """
+        Resets the values of start and stop indices
+        """
+        self.start_index = None
+        self.stop_index = None
 
     def save_traces_amp(self, folder_name, start_freq, end_freq):
         """
@@ -96,13 +113,16 @@ class VNA:
         in_gigs, trace_names = self.get_trace_info(start_freq, end_freq)
         steps = len(in_gigs)
 
-        trace_values = self.instru.query("CALCulate1:DATA:ALL? FDAT").split(",")
-        trace_values = list(map(lambda x: float(x), trace_values))
+        trace_values = self.get_trace_data()
+
+        # Create folder if it doesn't exist
+        os.makedirs(folder_name, exist_ok=True)
 
         for i, name in enumerate(trace_names):
             if name not in os.listdir(folder_name):
                 with open(f"{folder_name}/{name}", mode="w") as f:
                     for j, v in enumerate(in_gigs):
+                        print(v, start_freq)
                         if v < start_freq:
                             continue
 
@@ -131,19 +151,21 @@ class VNA:
         in_gigs, trace_names = self.get_trace_info(start_freq, end_freq)
         steps = len(in_gigs)
 
-        trace_values = self.instru.query("CALCulate1:DATA:ALL? FDAT").split(",")
-        trace_values = list(map(lambda x: float(x), trace_values))
+        trace_values = self.get_trace_data()
+
+        # Create folder if it doesn't exist
+        os.makedirs(folder_name, exist_ok=True)
 
         for i, name in enumerate(trace_names):
             if name not in os.listdir(folder_name):
                 with open(f"{folder_name}/{name}", mode="w") as f:
                     for j, v in enumerate(in_gigs):
-                        if v >= start_freq and self.start_index == None:
+                        if v >= start_freq and self.start_index is None:
                             self.start_index = j
-                        if v == end_freq and self.stop_index == None:
+                        if v == end_freq and self.stop_index is None:
                             self.stop_index = j
                             break
-                        elif v > end_freq and self.stop_index == None:
+                        elif v > end_freq and self.stop_index is None:
                             self.stop_index = j - 1
                             break
 
@@ -180,15 +202,200 @@ class VNA:
                 )
                 f.write(vals)
 
-    def reset_indices(self):
+
+class RohdeSchwartzVNA(BaseVNA):
+    """
+    Implementation for Rohde & Schwarz VNAs.
+    """
+
+    def is_compatible_vna(self, idn_response):
+        """Check if the instrument is a compatible Rohde & Schwarz VNA"""
+        if idn_response[0] == "Rohde-Schwarz":
+            try:
+                # Test a R&S specific command
+                self.instru.query("TRAC:STIM? CH1DATA")
+                return True
+            except Exception:
+                return False
+        return False
+
+    def get_vendor_name(self):
+        """Return vendor name"""
+        return "Rohde & Schwarz"
+
+    def get_trace_info(self, start_freq=None, stop_freq=None):
         """
-        Resets the valus of start and stop indices
+        Retrieves frequency points and trace metadata from R&S VNA.
         """
-        self.start_index = None
-        self.stop_index = None
+        freq_points = self.instru.query("TRAC:STIM? CH1DATA").split(",")
+        in_gigs = [float(freq_point) / 1000000000 for freq_point in freq_points]
+
+        trace_id_name = self.instru.query("CONF:TRAC:CAT?").split(",")
+        trace_id_name = list(map(lambda x: str(x).strip(), trace_id_name))
+
+        trace_names = []
+        for i in range(1, len(trace_id_name), 2):
+            if start_freq is None and stop_freq is None:
+                trace_names.append(f"{in_gigs[0]}-{in_gigs[-1]}_{trace_id_name[i]}.csv")
+            elif start_freq is not None and stop_freq is not None:
+                trace_names.append(f"{start_freq}-{stop_freq}_{trace_id_name[i]}.csv")
+
+        return in_gigs, trace_names
+
+    def get_trace_data(self):
+        """Get trace data from R&S VNA"""
+        trace_values = self.instru.query("CALCulate1:DATA:ALL? FDAT").split(",")
+        return list(map(float, trace_values))
+
+
+class KeysightVNA(BaseVNA):
+    """
+    Implementation for Keysight VNAs.
+    """
+
+    def is_compatible_vna(self, idn_response):
+        """Check if the instrument is a compatible Keysight VNA"""
+        if (
+            idn_response[0] == "Keysight Technologies"
+            or idn_response[0] == "Agilent Technologies"
+        ):
+            return True
+        return False
+
+    def get_vendor_name(self):
+        """Return vendor name"""
+        return "Keysight"
+
+    def get_trace_info(self, start_freq=None, stop_freq=None):
+        """
+        Retrieves frequency points and trace metadata from Keysight VNA.
+        """
+        trace_info = self.instru.query("CALC:PAR:CAT?").split(",")
+        only_trace_names = []
+        for i in range(0, len(trace_info), 2):
+            num = trace_info[i].split("_")[-1]
+            only_trace_names.append(f"Trc{num}")
+
+        freq_points = self.instru.query("CALC:MEAS:X:VAL?").split(",")
+        in_gigs = [float(freq_point) / 1000000000 for freq_point in freq_points]
+
+        trace_names = []
+        for i in range(len(only_trace_names)):
+            if start_freq is None and stop_freq is None:
+                trace_names.append(
+                    f"{in_gigs[0]}-{in_gigs[-1]}_{only_trace_names[i]}.csv"
+                )
+            elif start_freq is not None and stop_freq is not None:
+                trace_names.append(
+                    f"{start_freq}-{stop_freq}_{only_trace_names[i]}.csv"
+                )
+
+        return in_gigs, trace_names
+
+    def get_trace_data(self):
+        """Get trace data from Keysight VNA"""
+        # Make sure we're getting data in the right format
+        trace_info = self.instru.query("CALC:PAR:CAT?").split(",")
+        all_data = []
+
+        for i in range(0, len(trace_info), 2):
+            num = trace_info[i].split("_")[-1]
+            d = self.instru.query(f'CALC:DATA:MFD? "{num}"')
+            # print(d)
+            all_data.extend(list(map(float, d.strip().split(","))))
+
+        return all_data
+
+
+class VNAFactory:
+    """
+    Factory class to create appropriate VNA instance based on available hardware.
+    """
+
+    @staticmethod
+    def create_vna():
+        """
+        Try to connect to available VNAs and return the appropriate instance.
+
+        Returns:
+            BaseVNA: Instance of a VNA class that successfully connected
+        """
+        # Try Rohde & Schwarz first
+        vna = RohdeSchwartzVNA()
+        if vna.initialize_vna():
+            return vna
+
+        # Try Keysight next
+        vna = KeysightVNA()
+        if vna.initialize_vna():
+            return vna
+
+        # If no compatible VNA is found, return None
+        print("No compatible VNA found")
+        return None
+
+
+# For backwards compatibility with existing code
+class VNA(BaseVNA):
+    """
+    Legacy VNA class for backward compatibility.
+    """
+
+    def __init__(self):
+        """
+        Initialize VNA object and create internal reference to actual VNA implementation.
+        """
+        super().__init__()
+        self._impl = None
+        self.connected = False  # For backward compatibility with TODO in original code
+
+    def initialize_vna(self):
+        """
+        Initialize VNA by delegating to factory.
+        """
+        self._impl = VNAFactory.create_vna()
+        if self._impl:
+            self.connected = True
+            self.instru = self._impl.instru
+            return True
+        return False
+
+    def is_compatible_vna(self, idn_response):
+        """Delegate to implementation"""
+        if self._impl:
+            return self._impl.is_compatible_vna(idn_response)
+        return False
+
+    def get_vendor_name(self):
+        """Delegate to implementation"""
+        if self._impl:
+            return self._impl.get_vendor_name()
+        return "Unknown"
+
+    def get_trace_info(self, start_freq=None, stop_freq=None):
+        """Delegate to implementation"""
+        if self._impl:
+            return self._impl.get_trace_info(start_freq, stop_freq)
+        return [15.5, 17.5], "hehe"  # Original debug values
+
+    def get_trace_data(self):
+        """Delegate to implementation"""
+        if self._impl:
+            return self._impl.get_trace_data()
+        return []
+
+    def save_traces_amp(self, folder_name, start_freq, end_freq):
+        """Delegate to implementation"""
+        if self._impl:
+            self._impl.save_traces_amp(folder_name, start_freq, end_freq)
+
+    def save_traces(self, state, folder_name, start_freq, end_freq):
+        """Delegate to implementation"""
+        if self._impl:
+            self._impl.save_traces(state, folder_name, start_freq, end_freq)
 
 
 if __name__ == "__main__":
     v = VNA()
     v.initialize_vna()
-    print(v.get_trace_info())
+    print(v.get_trace_data())

@@ -21,7 +21,7 @@ class FPGA:
             baudrate (int, optional): UART communication speed. Defaults to 9600.
             timeout (int, optional): Timeout for operations. Defaults to 1.
         """
-        self.connected = False  # TODO : make it False
+        self.connected = True  # TODO : make it False
         self.port = None
         self.baudrate = baudrate
         self.timeout = timeout
@@ -33,7 +33,7 @@ class FPGA:
         Returns:
             bool: Returns True if FPGA is found. Otherwise return False
         """
-        # return  # TODO : comment it
+        return  # TODO : comment it
         keyword = "USB Serial"
         ports = serial.tools.list_ports.comports()
         for port in ports:

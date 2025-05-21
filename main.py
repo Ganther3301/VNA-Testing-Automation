@@ -25,7 +25,7 @@ class MackIITMGUI:
         self.fpga = FPGA()
         self.vna = VNA()
 
-        self.file_path = ''
+        self.file_path = ""
         self.mode_var = tk.StringVar(value="")
         self.device_type_var = tk.StringVar(value="")
         self.test_running = False
@@ -42,30 +42,38 @@ class MackIITMGUI:
 
         # Content Frame (top area)
         self.content_frame = ttk.Frame(self.main_container)
-        self.content_frame.grid(
-            row=0, column=0, sticky="nsew", padx=20, pady=10)
+        self.content_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=10)
 
         # Title
-        ttk.Label(self.content_frame, text="MACK IITM TESTING SYSTEM",
-                  font=("Times New Roman", 16, "bold")).pack(pady=(10, 5))
+        ttk.Label(
+            self.content_frame,
+            text="MACK IITM TESTING SYSTEM",
+            font=("Times New Roman", 16, "bold"),
+        ).pack(pady=(10, 5))
 
         # Device Type Selection Frame (new)
         self.device_type_frame = ttk.Frame(self.content_frame)
         self.device_type_frame.pack(pady=10)
         ttk.Label(self.device_type_frame, text="Select Device Type:").pack(
-            side="left", padx=(0, 10))
+            side="left", padx=(0, 10)
+        )
 
         # Radio buttons for device type
-        device_types = {"Amplifier": "amplifier",
-                        "Phase Shifter": "phase_shifter"}
+        device_types = {"Amplifier": "amplifier", "Phase Shifter": "phase_shifter"}
         for text, value in device_types.items():
-            ttk.Radiobutton(self.device_type_frame, text=text, variable=self.device_type_var,
-                            value=value, command=self.on_device_type_change).pack(side="left", padx=5)
+            ttk.Radiobutton(
+                self.device_type_frame,
+                text=text,
+                variable=self.device_type_var,
+                value=value,
+                command=self.on_device_type_change,
+            ).pack(side="left", padx=5)
 
         # Frame 1 - Connect button (shown after device type selection)
         self.frame1 = ttk.Frame(self.content_frame)
         self.connect_button = ttk.Button(
-            self.frame1, text="CONNECT", command=self.connect_devices)
+            self.frame1, text="CONNECT", command=self.connect_devices
+        )
         self.connect_button.pack(anchor="center")
 
         # Frame 2 (hidden until connect)
@@ -86,11 +94,13 @@ class MackIITMGUI:
         output_frame.columnconfigure(0, weight=1)
 
         self.output_box = tk.Text(
-            output_frame, wrap="word", state="disabled", height=8, font=("Consolas", 10))
+            output_frame, wrap="word", state="disabled", height=8, font=("Consolas", 10)
+        )
         self.output_box.grid(row=0, column=0, sticky="nsew")
 
         scrollbar = ttk.Scrollbar(
-            output_frame, orient="vertical", command=self.output_box.yview)
+            output_frame, orient="vertical", command=self.output_box.yview
+        )
         scrollbar.grid(row=0, column=1, sticky="ns")
         self.output_box.config(yscrollcommand=scrollbar.set)
 
@@ -129,8 +139,9 @@ class MackIITMGUI:
         test_frame = ttk.Frame(self.amplifier_test_frame)
         test_frame.pack(fill="x", expand=True)
 
-        ttk.Button(test_frame, text="Save Traces",
-                   command=self.run_amplifier_test).pack(pady=10)
+        ttk.Button(
+            test_frame, text="Save Traces", command=self.run_amplifier_test
+        ).pack(pady=10)
 
     def run_amplifier_test(self):
         """Run the amplifier test in a separate thread"""
@@ -147,13 +158,12 @@ class MackIITMGUI:
         os.makedirs(folder_name, exist_ok=True)
         try:
             self.vna.save_traces_amp(
-                folder_name, self.start_freq, self.stop_freq)  # TODO : UNCOMMENT
+                folder_name, self.start_freq, self.stop_freq
+            )  # TODO : UNCOMMENT
 
-            self.log_threadsafe(
-                "Amplifier data successfully saved", "success")
+            self.log_threadsafe("Amplifier data successfully saved", "success")
         except Exception as e:
-            self.log_threadsafe(
-                f"[ERROR] Amplifier test failed: {str(e)}", "error")
+            self.log_threadsafe(f"[ERROR] Amplifier test failed: {str(e)}", "error")
         finally:
             self.test_running = False
 
@@ -165,14 +175,17 @@ class MackIITMGUI:
             frame_content.columnconfigure(i, weight=1)
 
         self.start_freq_entry = self.add_labeled_entry(
-            frame_content, "Start Frequency", 0, 0)
+            frame_content, "Start Frequency", 0, 0
+        )
         self.stop_freq_entry = self.add_labeled_entry(
-            frame_content, "Stop Frequency", 0, 2)
+            frame_content, "Stop Frequency", 0, 2
+        )
 
         self.start_freq_entry.bind("<KeyRelease>", self.hide_frame3_on_change)
         self.stop_freq_entry.bind("<KeyRelease>", self.hide_frame3_on_change)
         self.config_button = ttk.Button(
-            frame_content, text="CONFIGURE", command=self.configure_measurement)
+            frame_content, text="CONFIGURE", command=self.configure_measurement
+        )
         self.config_button.grid(row=0, column=6, padx=10)
 
     def setup_frame3(self):
@@ -186,8 +199,7 @@ class MackIITMGUI:
         delay_frame = ttk.Frame(self.radio_panel)
         delay_frame.pack(side="right", anchor="ne", padx=20)
 
-        ttk.Label(delay_frame, text="Delay (seconds):").pack(
-            side="left", padx=(0, 5))
+        ttk.Label(delay_frame, text="Delay (seconds):").pack(side="left", padx=(0, 5))
         self.delay_entry = ttk.Entry(delay_frame, width=5)
         self.delay_entry.pack(side="left")
         self.delay_entry.insert(0, str(self.delay))  # Set default value
@@ -204,12 +216,17 @@ class MackIITMGUI:
         modes = {
             "Single State Transmission": "single",
             "All State Data": "all",
-            "Upload CSV": "csv"
+            "Upload CSV": "csv",
         }
 
         for text, value in modes.items():
-            ttk.Radiobutton(radio_frame, text=text, variable=self.mode_var, value=value,
-                            command=self.show_selected_mode).pack(anchor="w", pady=2)
+            ttk.Radiobutton(
+                radio_frame,
+                text=text,
+                variable=self.mode_var,
+                value=value,
+                command=self.show_selected_mode,
+            ).pack(anchor="w", pady=2)
 
         self.setup_single_frame()
         self.setup_all_state_frame()
@@ -236,30 +253,34 @@ class MackIITMGUI:
         container = ttk.Frame(self.single_frame)
         container.pack(expand=True)
         self.n_entry = self.add_labeled_entry(container, "Number of Bits:")
-        self.state_entry = self.add_labeled_entry(
-            container, "State for Transmission:")
-        ttk.Button(container, text="Trigger", command=lambda: self.start_test_thread(
-            'single_state')).pack(pady=10)
+        self.state_entry = self.add_labeled_entry(container, "State for Transmission:")
+        ttk.Button(
+            container,
+            text="Trigger",
+            command=lambda: self.start_test_thread("single_state"),
+        ).pack(pady=10)
 
     def setup_all_state_frame(self):
         container = ttk.Frame(self.all_state_frame)
         container.pack(expand=True)
-        self.bits_entry = self.add_labeled_entry(
-            container, "Bits for Phase Shifter:")
-        self.states_entry = self.add_labeled_entry(
-            container, "Number of States:")
-        ttk.Button(container, text="Trigger",
-                   command=lambda: self.start_test_thread('all_states')).pack(pady=10)
+        self.bits_entry = self.add_labeled_entry(container, "Bits for Phase Shifter:")
+        self.states_entry = self.add_labeled_entry(container, "Number of States:")
+        ttk.Button(
+            container,
+            text="Trigger",
+            command=lambda: self.start_test_thread("all_states"),
+        ).pack(pady=10)
 
     def setup_upload_frame(self):
         container = ttk.Frame(self.upload_frame)
         container.pack(expand=True)
-        ttk.Button(container, text="Upload CSV",
-                   command=self.upload_csv).pack(pady=5)
-        ttk.Label(container, textvariable=self.csv_label_var,
-                  font=("Arial", 9, "italic")).pack(pady=5)
-        ttk.Button(container, text="Trigger", command=lambda: self.start_test_thread(
-            'csv')).pack(pady=5)
+        ttk.Button(container, text="Upload CSV", command=self.upload_csv).pack(pady=5)
+        ttk.Label(
+            container, textvariable=self.csv_label_var, font=("Arial", 9, "italic")
+        ).pack(pady=5)
+        ttk.Button(
+            container, text="Trigger", command=lambda: self.start_test_thread("csv")
+        ).pack(pady=5)
 
     def add_labeled_entry(self, parent, label_text, row=None, column=None):
         if row is not None and column is not None:
@@ -279,14 +300,16 @@ class MackIITMGUI:
     def style_log_tags(self):
         self.output_box.tag_configure("info", foreground="blue")
         self.output_box.tag_configure(
-            "error", foreground="red", font=("Consolas", 10, "bold"))
+            "error", foreground="red", font=("Consolas", 10, "bold")
+        )
         self.output_box.tag_configure("success", foreground="green")
         self.output_box.tag_configure("warning", foreground="orange")
         self.output_box.tag_configure(
-            "timestamp", foreground="gray", font=("Consolas", 9, "italic"))
+            "timestamp", foreground="gray", font=("Consolas", 9, "italic")
+        )
 
     def connect_devices(self):
-        if self.device_type == 'phase_shifter':
+        if self.device_type == "phase_shifter":
             self.fpga.initialize_fpga()
 
             if self.fpga.connected:
@@ -296,18 +319,20 @@ class MackIITMGUI:
 
         try:
             self.vna.initialize_vna()
-        except:
-            pass
-            # self.log(
-            #     "[ERROR] Could not locate a VISA implementation", tag='error')
+        except Exception:
+            # pass
+            self.log("[ERROR] Could not locate a VISA implementation", tag="error")
 
         if self.vna.connected:
             self.log("VNA Successfully Connected", "success")
         else:
             self.log("[ERROR] VNA Connection Failed", "error")
 
-        if (self.fpga.connected and self.vna.connected and self.device_type == 'phase_shifter') or \
-                (self.vna.connected and self.device_type == 'amplifier'):
+        if (
+            self.fpga.connected
+            and self.vna.connected
+            and self.device_type == "phase_shifter"
+        ) or (self.vna.connected and self.device_type == "amplifier"):
             self.connect_button.state(["disabled"])
             self.frame2.pack(fill="x", pady=10)
 
@@ -318,7 +343,10 @@ class MackIITMGUI:
 
             freq_range, _ = self.vna.get_trace_info()
 
-            if freq_range[0] <= start_freq < stop_freq <= freq_range[-1] or freq_range[0] <= start_freq == stop_freq <= freq_range[-1]:
+            if (
+                freq_range[0] <= start_freq < stop_freq <= freq_range[-1]
+                or freq_range[0] <= start_freq == stop_freq <= freq_range[-1]
+            ):
                 self.start_freq = start_freq
                 self.stop_freq = stop_freq
 
@@ -326,18 +354,19 @@ class MackIITMGUI:
                 if self.device_type_var.get() == "phase_shifter":
                     self.frame3.pack()
                     self.log(
-                        "Phase shifter measurement configuration successful. Choose a transmission mode.", "success")
+                        "Phase shifter measurement configuration successful. Choose a transmission mode.",
+                        "success",
+                    )
                 else:  # amplifier mode
                     self.amplifier_test_frame.pack(fill="x", pady=10)
                     self.log(
-                        "Amplifier measurement configuration successful.", "success")
+                        "Amplifier measurement configuration successful.", "success"
+                    )
 
             else:
-                self.log(
-                    "[ERROR] Frequency range not within sweep range", "error")
+                self.log("[ERROR] Frequency range not within sweep range", "error")
         except ValueError:
-            self.log(
-                "[ERROR] Invalid input. Please enter valid numbers.", "error")
+            self.log("[ERROR] Invalid input. Please enter valid numbers.", "error")
 
     def show_selected_mode(self):
         for frame in [self.single_frame, self.all_state_frame, self.upload_frame]:
@@ -363,18 +392,22 @@ class MackIITMGUI:
             frame.pack_forget()
 
         # Clear entries in all modes
-        for entry in [self.n_entry, self.state_entry, self.bits_entry, self.states_entry]:
+        for entry in [
+            self.n_entry,
+            self.state_entry,
+            self.bits_entry,
+            self.states_entry,
+        ]:
             try:
                 entry.delete(0, tk.END)
-            except:
+            except Exception:
                 pass  # Entry might not exist yet
 
         self.csv_label_var.set("No file selected")
-        self.file_path = ''
+        self.file_path = ""
 
     def upload_csv(self):
-        self.file_path = filedialog.askopenfilename(
-            filetypes=[("CSV files", "*.csv")])
+        self.file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
         if self.file_path:
             filename = os.path.basename(self.file_path)
             self.csv_label_var.set(f"Uploaded: {filename}")
@@ -390,8 +423,7 @@ class MackIITMGUI:
             return
 
         self.test_running = True
-        threading.Thread(target=self.start_test,
-                         args=(mode,), daemon=True).start()
+        threading.Thread(target=self.start_test, args=(mode,), daemon=True).start()
 
     def log_threadsafe(self, message, tag="info"):
         """Thread-safe logging function"""
@@ -400,23 +432,26 @@ class MackIITMGUI:
     def start_test(self, mode):
         print(self.delay)
         try:
-            folder_name = datetime.datetime.now().strftime("measurement_%Y-%m-%d_%H-%M-%S")
+            folder_name = datetime.datetime.now().strftime(
+                "measurement_%Y-%m-%d_%H-%M-%S"
+            )
 
-            if mode == 'csv':
+            if mode == "csv":
                 if self.file_path:
                     self.log_threadsafe("Reading CSV file...")
-                    with open(self.file_path, 'r') as f:
+                    with open(self.file_path, "r") as f:
                         csv_data = csv.reader(f)
                         states = []
                         for i in list(csv_data)[0]:
                             try:
                                 states.append(int(i))
-                            except:
+                            except Exception:
                                 pass
 
                     if not states:
                         self.log_threadsafe(
-                            "[ERROR] No valid states found in CSV", "error")
+                            "[ERROR] No valid states found in CSV", "error"
+                        )
                         self.test_running = False
                         return
 
@@ -425,68 +460,81 @@ class MackIITMGUI:
                     for idx, state in enumerate(states):
                         self.fpga.trigger_state(state)
                         self.log_threadsafe(
-                            f"[TRIGGER] Triggered state {state}", "success")
+                            f"[TRIGGER] Triggered state {state}", "success"
+                        )
                         time.sleep(self.delay)
                         self.vna.save_traces(
-                            state, folder_name, self.start_freq, self.stop_freq)
+                            state, folder_name, self.start_freq, self.stop_freq
+                        )
                         self.log_threadsafe(
-                            f"Saved measurement for state {state}", "success")
+                            f"Saved measurement for state {state}", "success"
+                        )
 
                     self.log_threadsafe("Test completed", "success")
                     self.vna.reset_indices()
                 else:
                     self.log_threadsafe(
-                        "[ERROR] Please upload a CSV file first", 'error')
+                        "[ERROR] Please upload a CSV file first", "error"
+                    )
 
-            elif mode == 'single_state':
+            elif mode == "single_state":
                 try:
                     n = int(self.n_entry.get())
                     state = int(self.state_entry.get())
-                    if state >= 2 ** n:
+                    if state >= 2**n:
                         self.log_threadsafe(
-                            f"[ERROR] Invalid: State exceeds 2^{n}", "error")
+                            f"[ERROR] Invalid: State exceeds 2^{n}", "error"
+                        )
                     else:
                         os.makedirs(folder_name, exist_ok=True)
                         self.log_threadsafe(
-                            f"Transmitting State {state} (n={n})", "info")
+                            f"Transmitting State {state} (n={n})", "info"
+                        )
                         self.fpga.trigger_state(state)
                         self.log_threadsafe(
-                            f"[TRIGGER] Triggered state {state}", "success")
+                            f"[TRIGGER] Triggered state {state}", "success"
+                        )
 
                         time.sleep(self.delay)
 
                         self.vna.save_traces(
-                            state, folder_name, self.start_freq, self.stop_freq)
+                            state, folder_name, self.start_freq, self.stop_freq
+                        )
                         self.log_threadsafe(
-                            f"Saved measurement for state {state}", "success")
+                            f"Saved measurement for state {state}", "success"
+                        )
 
                         self.log_threadsafe("Test completed", "success")
                         self.vna.reset_indices()
                 except ValueError:
-                    self.log_threadsafe(
-                        "[ERROR] Enter valid integers.", "error")
+                    self.log_threadsafe("[ERROR] Enter valid integers.", "error")
 
-            elif mode == 'all_states':
+            elif mode == "all_states":
                 try:
                     bits = int(self.bits_entry.get())
                     states = int(self.states_entry.get())
-                    if states > 2 ** bits:
+                    if states > 2**bits:
                         self.log_threadsafe(
-                            f"[ERROR] Invalid: Max states is {2**bits}", "error")
+                            f"[ERROR] Invalid: Max states is {2**bits}", "error"
+                        )
                     else:
                         self.log_threadsafe(
-                            f"All states mode: {states} states for {bits}-bit", "info")
+                            f"All states mode: {states} states for {bits}-bit", "info"
+                        )
                         os.makedirs(folder_name, exist_ok=True)
 
                         for idx, state in enumerate(range(states)):
                             self.fpga.trigger_state(state)
                             self.log_threadsafe(
-                                f"[TRIGGER] Triggered state {state}", "success")
+                                f"[TRIGGER] Triggered state {state}", "success"
+                            )
                             time.sleep(self.delay)
                             self.vna.save_traces(
-                                state, folder_name, self.start_freq, self.stop_freq)
+                                state, folder_name, self.start_freq, self.stop_freq
+                            )
                             self.log_threadsafe(
-                                f"Saved measurement for state {state}", "success")
+                                f"Saved measurement for state {state}", "success"
+                            )
 
                         self.log_threadsafe("Test completed", "success")
                         self.vna.reset_indices()
