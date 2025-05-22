@@ -33,6 +33,9 @@ class MackIITMGUI:
         self.create_widgets()
         self.log("Welcome! Please select device type and initialize system.")
 
+        self.pause_event = threading.Event()
+        self.cancel_event = threading.Event()
+
     def create_widgets(self):
         self.main_container = ttk.Frame(self.root)
         self.main_container.grid(row=1, column=0, sticky="nsew")
@@ -270,6 +273,12 @@ class MackIITMGUI:
             text="Trigger",
             command=lambda: self.start_test_thread("all_states"),
         ).pack(pady=10)
+        ttk.Button(container, text="Pause", command=self.pause_test).pack(
+            side="left", padx=5
+        )
+        ttk.Button(container, text="Cancel", command=self.cancel_test).pack(
+            side="left", padx=5
+        )
 
     def setup_upload_frame(self):
         container = ttk.Frame(self.upload_frame)
@@ -281,6 +290,12 @@ class MackIITMGUI:
         ttk.Button(
             container, text="Trigger", command=lambda: self.start_test_thread("csv")
         ).pack(pady=5)
+        ttk.Button(container, text="Pause", command=self.pause_test).pack(
+            side="left", padx=5
+        )
+        ttk.Button(container, text="Cancel", command=self.cancel_test).pack(
+            side="left", padx=5
+        )
 
     def add_labeled_entry(self, parent, label_text, row=None, column=None):
         if row is not None and column is not None:
@@ -313,20 +328,22 @@ class MackIITMGUI:
             self.fpga.initialize_fpga()
 
             if self.fpga.connected:
-                self.log("FPGA Successfully Connected", "success")
+                self.log_threadsafe("FPGA Successfully Connected", "success")
             else:
-                self.log("[ERROR] FPGA Not Connected", "error")
+                self.log_threadsafe("[ERROR] FPGA Not Connected", "error")
 
         try:
             self.vna.initialize_vna()
         except Exception:
             # pass
-            self.log("[ERROR] Could not locate a VISA implementation", tag="error")
+            self.log_threadsafe(
+                "[ERROR] Could not locate a VISA implementation", tag="error"
+            )
 
         if self.vna.connected:
-            self.log("VNA Successfully Connected", "success")
+            self.log_threadsafe("VNA Successfully Connected", "success")
         else:
-            self.log("[ERROR] VNA Connection Failed", "error")
+            self.log_threadsafe("[ERROR] VNA Connection Failed", "error")
 
         if (
             self.fpga.connected
@@ -435,6 +452,7 @@ class MackIITMGUI:
             folder_name = datetime.datetime.now().strftime(
                 "measurement_%Y-%m-%d_%H-%M-%S"
             )
+            os.makedirs(folder_name, exist_ok=True)
 
             if mode == "csv":
                 if self.file_path:
@@ -455,13 +473,34 @@ class MackIITMGUI:
                         self.test_running = False
                         return
 
-                    os.makedirs(folder_name, exist_ok=True)
+                    for state in states:
+                        if self.cancel_event.is_set():
+                            self.log_threadsafe(
+                                "[CANCELLED] Test was cancelled.", "warning"
+                            )
+                            return
 
-                    for idx, state in enumerate(states):
+                        while self.pause_event.is_set():
+                            time.sleep(0.1)
+                        if self.cancel_event.is_set():
+                            self.log_threadsafe(
+                                "[CANCELLED] Test was cancelled.", "warning"
+                            )
+                            return
+
                         self.fpga.trigger_state(state)
                         self.log_threadsafe(
                             f"[TRIGGER] Triggered state {state}", "success"
                         )
+
+                        while self.pause_event.is_set():
+                            time.sleep(0.1)
+                        if self.cancel_event.is_set():
+                            self.log_threadsafe(
+                                "[CANCELLED] Test was cancelled.", "warning"
+                            )
+                            return
+
                         time.sleep(self.delay)
                         self.vna.save_traces(
                             state, folder_name, self.start_freq, self.stop_freq
@@ -485,27 +524,43 @@ class MackIITMGUI:
                         self.log_threadsafe(
                             f"[ERROR] Invalid: State exceeds 2^{n}", "error"
                         )
-                    else:
-                        os.makedirs(folder_name, exist_ok=True)
-                        self.log_threadsafe(
-                            f"Transmitting State {state} (n={n})", "info"
-                        )
-                        self.fpga.trigger_state(state)
-                        self.log_threadsafe(
-                            f"[TRIGGER] Triggered state {state}", "success"
-                        )
+                        return
 
-                        time.sleep(self.delay)
-
-                        self.vna.save_traces(
-                            state, folder_name, self.start_freq, self.stop_freq
-                        )
+                    if self.cancel_event.is_set():
                         self.log_threadsafe(
-                            f"Saved measurement for state {state}", "success"
+                            "[CANCELLED] Test was cancelled.", "warning"
                         )
+                        return
 
-                        self.log_threadsafe("Test completed", "success")
-                        self.vna.reset_indices()
+                    while self.pause_event.is_set():
+                        time.sleep(0.1)
+                    if self.cancel_event.is_set():
+                        self.log_threadsafe(
+                            "[CANCELLED] Test was cancelled.", "warning"
+                        )
+                        return
+
+                    self.log_threadsafe(f"Transmitting State {state} (n={n})", "info")
+                    self.fpga.trigger_state(state)
+                    self.log_threadsafe(f"[TRIGGER] Triggered state {state}", "success")
+
+                    while self.pause_event.is_set():
+                        time.sleep(0.1)
+                    if self.cancel_event.is_set():
+                        self.log_threadsafe(
+                            "[CANCELLED] Test was cancelled.", "warning"
+                        )
+                        return
+
+                    time.sleep(self.delay)
+                    self.vna.save_traces(
+                        state, folder_name, self.start_freq, self.stop_freq
+                    )
+                    self.log_threadsafe(
+                        f"Saved measurement for state {state}", "success"
+                    )
+                    self.log_threadsafe("Test completed", "success")
+                    self.vna.reset_indices()
                 except ValueError:
                     self.log_threadsafe("[ERROR] Enter valid integers.", "error")
 
@@ -517,32 +572,56 @@ class MackIITMGUI:
                         self.log_threadsafe(
                             f"[ERROR] Invalid: Max states is {2**bits}", "error"
                         )
-                    else:
+                        return
+
+                    self.log_threadsafe(
+                        f"All states mode: {states} states for {bits}-bit", "info"
+                    )
+
+                    for state in range(states):
+                        if self.cancel_event.is_set():
+                            self.log_threadsafe(
+                                "[CANCELLED] Test was cancelled.", "warning"
+                            )
+                            return
+
+                        while self.pause_event.is_set():
+                            time.sleep(0.1)
+                        if self.cancel_event.is_set():
+                            self.log_threadsafe(
+                                "[CANCELLED] Test was cancelled.", "warning"
+                            )
+                            return
+
+                        self.fpga.trigger_state(state)
                         self.log_threadsafe(
-                            f"All states mode: {states} states for {bits}-bit", "info"
+                            f"[TRIGGER] Triggered state {state}", "success"
                         )
-                        os.makedirs(folder_name, exist_ok=True)
 
-                        for idx, state in enumerate(range(states)):
-                            self.fpga.trigger_state(state)
+                        while self.pause_event.is_set():
+                            time.sleep(0.1)
+                        if self.cancel_event.is_set():
                             self.log_threadsafe(
-                                f"[TRIGGER] Triggered state {state}", "success"
+                                "[CANCELLED] Test was cancelled.", "warning"
                             )
-                            time.sleep(self.delay)
-                            self.vna.save_traces(
-                                state, folder_name, self.start_freq, self.stop_freq
-                            )
-                            self.log_threadsafe(
-                                f"Saved measurement for state {state}", "success"
-                            )
+                            return
 
-                        self.log_threadsafe("Test completed", "success")
-                        self.vna.reset_indices()
+                        time.sleep(self.delay)
+                        self.vna.save_traces(
+                            state, folder_name, self.start_freq, self.stop_freq
+                        )
+                        self.log_threadsafe(
+                            f"Saved measurement for state {state}", "success"
+                        )
+
+                    self.log_threadsafe("Test completed", "success")
+                    self.vna.reset_indices()
                 except ValueError:
                     self.log_threadsafe("[ERROR] Invalid value added", "error")
 
         finally:
-            # Always execute this when test finishes (normally or with exception)
+            self.pause_event.clear()
+            self.cancel_event.clear()
             self.test_running = False
             self.vna.reset_indices()
 
@@ -553,6 +632,22 @@ class MackIITMGUI:
         self.output_box.insert("end", message + "\n", tag)
         self.output_box.see("end")
         self.output_box.configure(state="disabled")
+
+    def pause_test(self):
+        if self.test_running:
+            if not self.pause_event.is_set():
+                self.pause_event.set()
+                self.log("[INFO] Test paused. Click again to resume.", "warning")
+            else:
+                self.pause_event.clear()
+                self.log("[INFO] Test resumed.", "success")
+
+    def cancel_test(self):
+        if self.test_running:
+            self.cancel_event.set()
+            self.pause_event.clear()  # in case it was paused
+            self.test_running = False
+            self.log("[INFO] Cancelling test...", "warning")
 
 
 if __name__ == "__main__":

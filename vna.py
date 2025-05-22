@@ -347,7 +347,8 @@ class VNA(BaseVNA):
         """
         super().__init__()
         self._impl = None
-        self.connected = False  # For backward compatibility with TODO in original code
+        self.connected = False
+        # self.connected = True  # TODO: comment this
 
     def initialize_vna(self):
         """
