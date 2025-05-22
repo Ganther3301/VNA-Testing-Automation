@@ -10,7 +10,7 @@ class FPGA:
         connected (bool) : Flag indicating whether FPGA is connected or not.
         port (str or None) : The port that FPGA is connected to.
         baudrate (int) : UART communication speed
-        timeout (int) : timeout for operations 
+        timeout (int) : timeout for operations
     """
 
     def __init__(self, baudrate=9600, timeout=1):
@@ -33,7 +33,7 @@ class FPGA:
         Returns:
             bool: Returns True if FPGA is found. Otherwise return False
         """
-        return  # TODO : comment it
+        # return  # TODO : comment it
         keyword = "USB Serial"
         ports = serial.tools.list_ports.comports()
         for port in ports:
