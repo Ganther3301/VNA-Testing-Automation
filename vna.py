@@ -61,6 +61,19 @@ class BaseVNA(ABC):
         pass
 
     @abstractmethod
+    def create_trace(self, name, parameter):
+        """
+        Check if the VNA is compatible with this implementation.
+
+        Args:
+            idn_response (list): Split response from *IDN? query
+
+        Returns:
+            bool: True if compatible, False otherwise
+        """
+        pass
+
+    @abstractmethod
     def get_vendor_name(self):
         """
         Returns the vendor name for this VNA implementation.
@@ -247,6 +260,9 @@ class RohdeSchwartzVNA(BaseVNA):
         trace_values = self.instru.query("CALCulate1:DATA:ALL? FDAT").split(",")
         return list(map(float, trace_values))
 
+    def create_trace(self, name, parameter):
+        pass
+
 
 class KeysightVNA(BaseVNA):
     """
@@ -306,6 +322,24 @@ class KeysightVNA(BaseVNA):
 
         return all_data
 
+    def create_trace(self, name, parameter):
+        command = f"CALC:PAR:DEF:EXT '{name}', '{parameter}'"  # create Trace
+        try:
+            self.instru.write(command)
+        except Exception as e:
+            print("[ERROR] Invalid parameter or Trace with name already exists")
+            print(e)
+            return
+
+        count = self.instru.query("CALC:PAR:COUN?")  # get number of traces
+        count = int(count)
+        command = f"DISP:WIND:TRAC{count}:FEED '{name}'"  # Display trace
+
+        try:
+            self.instru.write(command)
+        except Exception as e:
+            print(e)
+
 
 class VNAFactory:
     """
@@ -347,8 +381,8 @@ class VNA(BaseVNA):
         """
         super().__init__()
         self._impl = None
-        self.connected = False
-        # self.connected = True  # TODO: comment this
+        # self.connected = False
+        self.connected = True  # TODO: comment this
 
     def initialize_vna(self):
         """
@@ -395,8 +429,11 @@ class VNA(BaseVNA):
         if self._impl:
             self._impl.save_traces(state, folder_name, start_freq, end_freq)
 
+    def create_trace(self, name, parameter):
+        self._impl.create_trace(name, parameter)
+
 
 if __name__ == "__main__":
     v = VNA()
     v.initialize_vna()
-    print(v.get_trace_data())
+    v.create_trace("trial2", "S21")
