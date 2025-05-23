@@ -456,79 +456,82 @@ class MackIITMGUI:
             os.makedirs(folder_name, exist_ok=True)
 
             if mode == "csv":
-                if self.file_path:
-                    self.log_threadsafe("Reading CSV file...")
-                    with open(self.file_path, "r") as f:
-                        csv_data = csv.reader(f)
-                        states = []
-                        for i in list(csv_data)[0]:
-                            try:
-                                states.append(int(i))
-                            except Exception:
-                                pass
+                try:
+                    if self.file_path:
+                        self.log_threadsafe("Reading CSV file...")
+                        with open(self.file_path, "r") as f:
+                            csv_data = csv.reader(f)
+                            states = []
+                            for i in list(csv_data)[0]:
+                                try:
+                                    states.append(int(i))
+                                except Exception:
+                                    pass
 
-                    if not states:
-                        self.log_threadsafe(
-                            "[ERROR] No valid states found in CSV", "error"
-                        )
-                        self.test_running = False
-                        return
-                    bits = int(self.bits_entry.get())
-                    if max(states) > 2**bits:
-                        self.log_threadsafe(
-                            "[ERROR] CSV has a state greater than the number of states",
-                            "error",
-                        )
-                        return
-
-                    for state in states:
-                        if self.cancel_event.is_set():
+                        if not states:
                             self.log_threadsafe(
-                                "[CANCELLED] Test was cancelled.", "warning"
+                                "[ERROR] No valid states found in CSV", "error"
                             )
+                            self.test_running = False
                             return
-
-                        while self.pause_event.is_set():
-                            time.sleep(0.1)
-                        if self.cancel_event.is_set():
+                        bits = int(self.bits_entry.get())
+                        if max(states) > 2**bits:
                             self.log_threadsafe(
-                                "[CANCELLED] Test was cancelled.", "warning"
-                            )
-                            return
-
-                        if not self.fpga.trigger_state(state):
-                            self.log_threadsafe(
-                                "[ERROR] FPGA communication failed. Please make sure FPGA is connected and all applications using the port are closed",
+                                "[ERROR] CSV has a state greater than the number of states",
                                 "error",
                             )
                             return
 
-                        self.log_threadsafe(
-                            f"[TRIGGER] Triggered state {state}", "success"
-                        )
+                        for state in states:
+                            if self.cancel_event.is_set():
+                                self.log_threadsafe(
+                                    "[CANCELLED] Test was cancelled.", "warning"
+                                )
+                                return
 
-                        while self.pause_event.is_set():
-                            time.sleep(0.1)
-                        if self.cancel_event.is_set():
+                            while self.pause_event.is_set():
+                                time.sleep(0.1)
+                            if self.cancel_event.is_set():
+                                self.log_threadsafe(
+                                    "[CANCELLED] Test was cancelled.", "warning"
+                                )
+                                return
+
+                            if not self.fpga.trigger_state(state):
+                                self.log_threadsafe(
+                                    "[ERROR] FPGA communication failed. Please make sure FPGA is connected and all applications using the port are closed",
+                                    "error",
+                                )
+                                return
+
                             self.log_threadsafe(
-                                "[CANCELLED] Test was cancelled.", "warning"
+                                f"[TRIGGER] Triggered state {state}", "success"
                             )
-                            return
 
-                        time.sleep(self.delay)
-                        self.vna.save_traces(
-                            state, folder_name, self.start_freq, self.stop_freq
-                        )
+                            while self.pause_event.is_set():
+                                time.sleep(0.1)
+                            if self.cancel_event.is_set():
+                                self.log_threadsafe(
+                                    "[CANCELLED] Test was cancelled.", "warning"
+                                )
+                                return
+
+                            time.sleep(self.delay)
+                            self.vna.save_traces(
+                                state, folder_name, self.start_freq, self.stop_freq
+                            )
+                            self.log_threadsafe(
+                                f"Saved measurement for state {state}", "success"
+                            )
+
+                        self.log_threadsafe("Test completed", "success")
+                        self.vna.reset_indices()
+                    else:
                         self.log_threadsafe(
-                            f"Saved measurement for state {state}", "success"
+                            "[ERROR] Please upload a CSV file first", "error"
                         )
-
-                    self.log_threadsafe("Test completed", "success")
-                    self.vna.reset_indices()
-                else:
-                    self.log_threadsafe(
-                        "[ERROR] Please upload a CSV file first", "error"
-                    )
+                except ValueError:
+                    self.log_threadsafe("[ERROR] Enter valid integer", "error")
 
             elif mode == "single_state":
                 try:
