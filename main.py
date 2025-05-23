@@ -283,6 +283,7 @@ class MackIITMGUI:
     def setup_upload_frame(self):
         container = ttk.Frame(self.upload_frame)
         container.pack(expand=True)
+        self.bits_entry = self.add_labeled_entry(container, "Bits for Phase Shifter:")
         ttk.Button(container, text="Upload CSV", command=self.upload_csv).pack(pady=5)
         ttk.Label(
             container, textvariable=self.csv_label_var, font=("Arial", 9, "italic")
@@ -472,6 +473,13 @@ class MackIITMGUI:
                         )
                         self.test_running = False
                         return
+                    bits = int(self.bits_entry.get())
+                    if max(states) > 2**bits:
+                        self.log_threadsafe(
+                            "[ERROR] CSV has a state greater than the number of states",
+                            "error",
+                        )
+                        return
 
                     for state in states:
                         if self.cancel_event.is_set():
@@ -488,7 +496,13 @@ class MackIITMGUI:
                             )
                             return
 
-                        self.fpga.trigger_state(state)
+                        if not self.fpga.trigger_state(state):
+                            self.log_threadsafe(
+                                "[ERROR] FPGA communication failed. Please make sure FPGA is connected and all applications using the port are closed",
+                                "error",
+                            )
+                            return
+
                         self.log_threadsafe(
                             f"[TRIGGER] Triggered state {state}", "success"
                         )
@@ -541,7 +555,14 @@ class MackIITMGUI:
                         return
 
                     self.log_threadsafe(f"Transmitting State {state} (n={n})", "info")
-                    self.fpga.trigger_state(state)
+
+                    if not self.fpga.trigger_state(state):
+                        self.log_threadsafe(
+                            "[ERROR] FPGA communication failed. Please make sure FPGA is connected and all applications using the port are closed",
+                            "error",
+                        )
+                        return
+
                     self.log_threadsafe(f"[TRIGGER] Triggered state {state}", "success")
 
                     while self.pause_event.is_set():
@@ -593,7 +614,13 @@ class MackIITMGUI:
                             )
                             return
 
-                        self.fpga.trigger_state(state)
+                        if not self.fpga.trigger_state(state):
+                            self.log_threadsafe(
+                                "[ERROR] FPGA communication failed. Please make sure FPGA is connected and all applications using the port are closed",
+                                "error",
+                            )
+                            return
+
                         self.log_threadsafe(
                             f"[TRIGGER] Triggered state {state}", "success"
                         )
