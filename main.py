@@ -283,7 +283,7 @@ class MackIITMGUI:
     def setup_upload_frame(self):
         container = ttk.Frame(self.upload_frame)
         container.pack(expand=True)
-        self.bits_entry = self.add_labeled_entry(container, "Bits for Phase Shifter:")
+        self.n_bits_entry = self.add_labeled_entry(container, "Bits for Phase Shifter:")
         ttk.Button(container, text="Upload CSV", command=self.upload_csv).pack(pady=5)
         ttk.Label(
             container, textvariable=self.csv_label_var, font=("Arial", 9, "italic")
@@ -415,6 +415,7 @@ class MackIITMGUI:
             self.state_entry,
             self.bits_entry,
             self.states_entry,
+            self.n_bits_entry,
         ]:
             try:
                 entry.delete(0, tk.END)
@@ -474,7 +475,7 @@ class MackIITMGUI:
                             )
                             self.test_running = False
                             return
-                        bits = int(self.bits_entry.get())
+                        bits = int(self.n_bits_entry.get())
                         if max(states) > 2**bits:
                             self.log_threadsafe(
                                 "[ERROR] CSV has a state greater than the number of states",

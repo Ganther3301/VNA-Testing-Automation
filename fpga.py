@@ -21,7 +21,8 @@ class FPGA:
             baudrate (int, optional): UART communication speed. Defaults to 9600.
             timeout (int, optional): Timeout for operations. Defaults to 1.
         """
-        self.connected = False  # TODO : make it False
+        # self.connected = True  # TODO : comment it
+        self.connected = False
         self.port = None
         self.baudrate = baudrate
         self.timeout = timeout
@@ -72,10 +73,10 @@ class FPGA:
 
                 if response:
                     print(f"[FPGA Response] {response}")
-                    return True
                 else:
                     print("[WARN] No response received from FPGA")
-                    return False
+
+                return True
         except serial.SerialException as e:
             print(f"[ERROR] Serial communication error: {e}")
             return False
