@@ -1,5 +1,3 @@
-# README
-
 ## ToDos
 
 - [x] Check if CSV states are within the phase shifter bits
