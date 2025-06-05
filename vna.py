@@ -36,7 +36,7 @@ class BaseVNA(ABC):
                     self.instru = instru
                     self.connected = True
                     break
-            except Exception as e:
+            except Exception:
                 # print(f"Error connecting to {r}: {e}")
                 continue
 
@@ -61,7 +61,7 @@ class BaseVNA(ABC):
         pass
 
     @abstractmethod
-    def create_trace(self, name, parameter):
+    def create_trace(self, name, parameter, unit):
         """
         Check if the VNA is compatible with this implementation.
 
@@ -215,6 +215,22 @@ class BaseVNA(ABC):
                 )
                 f.write(vals)
 
+    def write_command(self, command):
+        try:
+            self.instru.write(command)
+            return True
+        except Exception as e:
+            print(f"[ERROR] {e}")
+            return False
+
+    def query_command(self, command):
+        try:
+            print(self.instru.query(command))
+            return True
+        except Exception as e:
+            print(f"[ERROR] {e}")
+            return False
+
 
 class RohdeSchwartzVNA(BaseVNA):
     """
@@ -260,7 +276,7 @@ class RohdeSchwartzVNA(BaseVNA):
         trace_values = self.instru.query("CALCulate1:DATA:ALL? FDAT").split(",")
         return list(map(float, trace_values))
 
-    def create_trace(self, name, parameter):
+    def create_trace(self, name, parameter, unit):
         pass
 
 
@@ -287,10 +303,20 @@ class KeysightVNA(BaseVNA):
         Retrieves frequency points and trace metadata from Keysight VNA.
         """
         trace_info = self.instru.query("CALC:PAR:CAT?").split(",")
+        print(trace_info)
         only_trace_names = []
-        for i in range(0, len(trace_info), 2):
-            num = trace_info[i].split("_")[-1]
-            only_trace_names.append(f"Trc{num}")
+
+        # for i in range(0, len(trace_info), 2):
+        #     num = trace_info[i].split("_")[-1]
+        #     only_trace_names.append(f"Trc{num}")
+
+        # for i in range(0, len(trace_info), 2): # TODO :test this
+        #     only_trace_names.append(trace_info[i])
+
+        for i in range(0, int(len(trace_info) // 2)):
+            only_trace_names.append(f"Trc{i + 1}")
+
+        print(only_trace_names)
 
         freq_points = self.instru.query("CALC:MEAS:X:VAL?").split(",")
         in_gigs = [float(freq_point) / 1000000000 for freq_point in freq_points]
@@ -312,17 +338,25 @@ class KeysightVNA(BaseVNA):
         """Get trace data from Keysight VNA"""
         # Make sure we're getting data in the right format
         trace_info = self.instru.query("CALC:PAR:CAT?").split(",")
+        # print(trace_info)
         all_data = []
 
-        for i in range(0, len(trace_info), 2):
-            num = trace_info[i].split("_")[-1]
-            d = self.instru.query(f'CALC:DATA:MFD? "{num}"')
+        # for i in range(0, len(trace_info), 2):
+        #     # for i in range(1, int(len(trace_info) / 3) + 1):
+        #     num = trace_info[i].split("_")[-1].split(" ")[0]
+        #     d = self.instru.query(f'CALC:DATA:MFD? "{num}"')
+        #     # print(d)
+        #     all_data.extend(list(map(float, d.strip().split(","))))
+
+        for i in range(1, int(len(trace_info) // 2) + 1):
+            print(i)
+            d = self.instru.query(f'CALC:DATA:MFD? "{i}"')
             # print(d)
             all_data.extend(list(map(float, d.strip().split(","))))
 
         return all_data
 
-    def create_trace(self, name, parameter):
+    def create_trace(self, name, parameter, unit):
         command = f"CALC:PAR:DEF:EXT '{name}', '{parameter}'"  # create Trace
         try:
             self.instru.write(command)
@@ -333,6 +367,9 @@ class KeysightVNA(BaseVNA):
 
         count = self.instru.query("CALC:PAR:COUN?")  # get number of traces
         count = int(count)
+        if unit == "deg":
+            self.instru.write(f"CALC:MEAS{count}:FORM PHAS")
+
         command = f"DISP:WIND:TRAC{count}:FEED '{name}'"  # Display trace
 
         try:
@@ -381,8 +418,8 @@ class VNA(BaseVNA):
         """
         super().__init__()
         self._impl = None
-        # self.connected = False
-        self.connected = True  # TODO: comment this
+        self.connected = False
+        # self.connected = True  # TODO: comment this
 
     def initialize_vna(self):
         """
@@ -429,11 +466,11 @@ class VNA(BaseVNA):
         if self._impl:
             self._impl.save_traces(state, folder_name, start_freq, end_freq)
 
-    def create_trace(self, name, parameter):
-        self._impl.create_trace(name, parameter)
+    def create_trace(self, name, parameter, unit):
+        self._impl.create_trace(name, parameter, unit)
 
 
 if __name__ == "__main__":
     v = VNA()
     v.initialize_vna()
-    v.create_trace("trial2", "S21")
+    # v.create_trace("trial2", "S21")

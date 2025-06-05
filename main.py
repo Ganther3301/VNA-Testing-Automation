@@ -1,10 +1,14 @@
-import tkinter as tk
+import json
+import math
 import csv
-from tkinter import ttk, filedialog
+import tkinter as tk
+from tkinter import ttk, filedialog, messagebox
 import os
 import datetime
 import time
 import threading
+import pandas as pd
+import numpy as np
 
 from fpga import FPGA
 from vna import VNA
@@ -19,7 +23,7 @@ class MackIITMGUI:
         self.root.geometry("900x600")
         self.root.minsize(700, 500)
 
-        self.root.rowconfigure(1, weight=1)
+        self.root.rowconfigure(2, weight=1)
         self.root.columnconfigure(0, weight=1)
 
         self.fpga = FPGA()
@@ -30,68 +34,271 @@ class MackIITMGUI:
         self.device_type_var = tk.StringVar(value="")
         self.test_running = False
 
+        self.phase_file_path = ""
+        self.analysis_save_path = ""  # Changed from amplitude_file_paths
+
+        # Title
+        self.title_label = ttk.Label(
+            self.root,
+            text="MACK IITM TESTING SYSTEM",
+            font=("Times New Roman", 16, "bold"),
+        )
+        self.title_label.grid(row=0, column=0, pady=(10, 0))
+
         self.create_widgets()
-        self.log("Welcome! Please select device type and initialize system.")
+        self.create_console()
+        self.log("Welcome! Please ensure VNA is connected to before proceeding.")
 
         self.pause_event = threading.Event()
         self.cancel_event = threading.Event()
 
     def create_widgets(self):
-        self.main_container = ttk.Frame(self.root)
-        self.main_container.grid(row=1, column=0, sticky="nsew")
-        self.main_container.rowconfigure(0, weight=1)  # Content expands
-        self.main_container.rowconfigure(1, weight=0)  # Log stays fixed
+        self.tab_control = ttk.Notebook(self.root)
+        self.tab_control.grid(row=1, column=0, sticky="nsew")
+
+        self.testing_tab = ttk.Frame(self.tab_control)
+        self.analysis_tab = ttk.Frame(self.tab_control)
+
+        self.tab_control.add(self.testing_tab, text="Testing")
+        self.tab_control.add(self.analysis_tab, text="Analysis")
+
+        # Testing Tab Content
+        self.main_container = self.testing_tab
+        self.main_container.rowconfigure(0, weight=1)
         self.main_container.columnconfigure(0, weight=1)
 
-        # Content Frame (top area)
         self.content_frame = ttk.Frame(self.main_container)
         self.content_frame.grid(row=0, column=0, sticky="nsew", padx=20, pady=10)
 
-        # Title
-        ttk.Label(
-            self.content_frame,
-            text="MACK IITM TESTING SYSTEM",
-            font=("Times New Roman", 16, "bold"),
-        ).pack(pady=(10, 5))
-
-        # Device Type Selection Frame (new)
-        self.device_type_frame = ttk.Frame(self.content_frame)
-        self.device_type_frame.pack(pady=10)
-        ttk.Label(self.device_type_frame, text="Select Device Type:").pack(
-            side="left", padx=(0, 10)
+        self.vna_connect_frame = ttk.Frame(self.content_frame)
+        self.vna_connect_button = ttk.Button(
+            self.vna_connect_frame,
+            text="Connect To VNA",
+            command=self.connect_vna,
         )
+        self.vna_connect_button.pack(anchor="center")
+        self.vna_connect_frame.pack()
 
-        # Radio buttons for device type
-        device_types = {"Amplifier": "amplifier", "Phase Shifter": "phase_shifter"}
-        for text, value in device_types.items():
-            ttk.Radiobutton(
-                self.device_type_frame,
-                text=text,
-                variable=self.device_type_var,
-                value=value,
-                command=self.on_device_type_change,
-            ).pack(side="left", padx=5)
+        self.device_select_frame = ttk.Frame(self.content_frame)
+        self.setup_device_select_frame()
 
-        # Frame 1 - Connect button (shown after device type selection)
-        self.frame1 = ttk.Frame(self.content_frame)
-        self.connect_button = ttk.Button(
-            self.frame1, text="CONNECT", command=self.connect_devices
-        )
-        self.connect_button.pack(anchor="center")
-
-        # Frame 2 (hidden until connect)
         self.frame2 = ttk.Frame(self.content_frame)
         self.setup_frame2()
 
-        # Frame 3 (radio buttons + dynamic content - only for Phase Shifter)
+        self.config_frame = ttk.Frame(self.content_frame)
+        self.setup_config_frame()
+
+        self.calib_frame = ttk.Frame(self.content_frame)
+        self.setup_calib_frame()
+
         self.frame3 = ttk.Frame(self.content_frame)
         self.setup_frame3()
 
-        # Frame 4 - Output log (bottom, always visible)
-        self.frame4 = ttk.Frame(self.main_container, padding=10)
-        self.frame4.grid(row=1, column=0, sticky="ew", padx=20, pady=(0, 10))
+        self.amplifier_test_frame = ttk.Frame(self.content_frame)
+        self.setup_amplifier_frame()
 
-        output_frame = ttk.Frame(self.frame4)
+        # Analysis Tab Content
+        analysis_container = ttk.Frame(self.analysis_tab)
+        analysis_container.pack(pady=20, padx=20, fill="x")
+
+        ttk.Label(analysis_container, text="Equibits", font=("Arial", 10)).pack(
+            anchor="w"
+        )
+        self.equibits_entry = ttk.Entry(analysis_container, width=40)
+        self.equibits_entry.pack(pady=5)
+
+        ttk.Button(
+            analysis_container, text="Upload Phase CSV", command=self.upload_phase_csv
+        ).pack(pady=5)
+
+        self.phase_csv_label = ttk.Label(
+            analysis_container,
+            text="No phase file selected",
+            font=("Arial", 9, "italic"),
+        )
+        self.phase_csv_label.pack(pady=2)
+
+        # Changed from amplitude files to save location
+        ttk.Button(
+            analysis_container,
+            text="Select Save Location",
+            command=self.select_save_location,
+        ).pack(pady=5)
+
+        self.save_location_label = ttk.Label(
+            analysis_container,
+            text="No save location selected",
+            font=("Arial", 9, "italic"),
+        )
+        self.save_location_label.pack(pady=2)
+
+        ttk.Button(
+            analysis_container, text="Run Analysis", command=self.run_analysis
+        ).pack(pady=15)
+
+    def upload_phase_csv(self):
+        file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
+        if file_path:
+            self.phase_file_path = file_path
+            filename = os.path.basename(file_path)
+            self.phase_csv_label.config(text=f"Phase file: {filename}")
+            self.log(f"[Analysis] Phase CSV uploaded: {filename}", "info")
+        else:
+            self.phase_csv_label.config(text="No phase file selected")
+            self.log("[Analysis] Phase CSV upload cancelled.", "warning")
+
+    def select_save_location(self):
+        """Select directory to save analysis results"""
+        save_dir = filedialog.askdirectory(
+            title="Select folder to save analysis results"
+        )
+        if save_dir:
+            self.analysis_save_path = save_dir
+            folder_name = (
+                os.path.basename(save_dir) if os.path.basename(save_dir) else save_dir
+            )
+            self.save_location_label.config(text=f"Save location: {folder_name}")
+            self.log(f"[Analysis] Save location selected: {save_dir}", "info")
+        else:
+            self.save_location_label.config(text="No save location selected")
+            self.log("[Analysis] Save location selection cancelled.", "warning")
+
+    def run_analysis(self):
+        # Validate required fields
+        equibits = self.equibits_entry.get().strip()
+        if not equibits.isdigit():
+            self.log("[ERROR] Equibits must be a positive integer.", "error")
+            return
+
+        if not self.phase_file_path:
+            self.log("[ERROR] Please upload a phase CSV file.", "error")
+            return
+
+        if not self.analysis_save_path:
+            self.log("[ERROR] Please select a save location.", "error")
+            return
+
+        self.log("[INFO] Starting analysis...", "info")
+
+        trace_data = pd.read_csv(
+            # "/home/ganther/Hithesh/Projects/MACK/VNA_automation/results/measurements with report/15.5-17.5_Trc3.csv",
+            # "/home/ganther/Hithesh/Projects/MACK/VNA_automation/results/measurement 201 points/15.5-17.5_Trc6.csv",
+            self.phase_file_path,
+            index_col=0,
+        )
+
+        equi_bits = int(self.equibits_entry.get())
+
+        # Adjust phase relative to first value
+        base_data = trace_data - trace_data.iloc[0]
+        base_data = base_data.where(base_data >= 0, base_data + 360)
+        base_data.to_excel(
+            f"{self.analysis_save_path}/Analysis_{equi_bits}.xlsx",
+            sheet_name="positive_converted",
+        )
+
+        # Ideal reference values
+        one_angle = 360 / 2**equi_bits
+        ideal = [i * one_angle for i in range(2**equi_bits)]  # C in MATLAB
+
+        def process_it(bd):
+            C = np.array(ideal)
+            Array4_column = np.array(bd)
+            z = []
+            O_column = []
+
+            for k in range(len(C)):
+                z1 = C[k] - Array4_column
+                min_abs_diff = np.min(np.abs(z1))
+                z.append(min_abs_diff)
+                indices_with_min = np.where(np.abs(z1) == min_abs_diff)[0]
+                min_index = np.min(indices_with_min)
+                # MATLAB is 1-based indexing
+                O_column.append(int(min_index) + 1)
+
+            re_arr = list()
+            for i in O_column:
+                re_arr.append(bd.iloc[i - 1])
+
+            print(f"Max z: {max(z)}, Min z: {min(z)}")
+            print(O_column)
+            return pd.DataFrame(re_arr)
+
+        # Method 1: Process all columns and store re_arranged in a dictionary
+        re_arranged = {}
+        rmse_values = {}
+        max_min_errors = {}
+        ideal_df = pd.DataFrame(ideal)
+
+        for column in base_data.columns:
+            print(f"Processing column: {column}")
+
+            # Process the column
+            fixed = process_it(base_data[column])
+
+            # Calculate RMSE
+            diff = ideal_df - fixed
+            diff_squared = diff**2
+            avg = diff_squared.values.mean()
+            rmse = math.sqrt(avg)
+
+            # Store re_arranged
+            re_arranged[column] = fixed.iloc[
+                :, 0
+            ].values  # Extract the series from DataFrame
+            rmse_values[column] = rmse
+            max_min_errors[column] = {
+                "max_error": diff.max()[0],
+                "min_error": diff.min()[0],
+            }
+
+            print(f"RMSE for {column}: {rmse}")
+            print("-" * 50)
+
+        max_rms_min = {}
+
+        for col in rmse_values.keys():
+            max_rms_min[col] = [
+                max_min_errors[col]["max_error"],
+                rmse_values[col],
+                max_min_errors[col]["min_error"],
+            ]
+
+        max_rms_min_df = pd.DataFrame(max_rms_min)
+        max_rms_min_df.to_excel(
+            f"{self.analysis_save_path}/PS_MAX_RMS_MIN_{equi_bits}.xlsx"
+        )
+        re_arranged_df = pd.DataFrame(re_arranged)
+
+        with pd.ExcelWriter(
+            f"{self.analysis_save_path}/Analysis_{equi_bits}.xlsx",
+            mode="a",
+            if_sheet_exists="replace",
+        ) as writer:
+            re_arranged_df.to_excel(writer, sheet_name="re_arranged")
+
+        with pd.ExcelWriter(
+            f"{self.analysis_save_path}/PS_MAX_RMS_MIN_{equi_bits}.xlsx",
+            mode="a",
+            if_sheet_exists="replace",
+        ) as writer:
+            # pd.DataFrame(rmse_values).to_excel(writer, sheet_name="RMS")
+            pd.Series(rmse_values).to_excel(writer, sheet_name="RMS")
+            # re_arranged_df.to_excel(writer, sheet_name="re_arranged")
+
+        self.log(f"Equibits: {equibits}", "info")
+        self.log(f"Phase file: {os.path.basename(self.phase_file_path)}", "info")
+        self.log(f"Save location: {self.analysis_save_path}", "info")
+
+        # Here you would implement your analysis logic
+        self.log("[INFO] Analysis completed successfully!", "success")
+
+    def create_console(self):
+        # Console shared by both tabs
+        self.console_frame = ttk.Frame(self.root, padding=10)
+        self.console_frame.grid(row=2, column=0, sticky="ew", padx=20, pady=(0, 10))
+
+        output_frame = ttk.Frame(self.console_frame)
         output_frame.pack(fill="both", expand=True)
         output_frame.rowconfigure(0, weight=1)
         output_frame.columnconfigure(0, weight=1)
@@ -109,8 +316,24 @@ class MackIITMGUI:
 
         self.style_log_tags()
 
-        # Set up the Amplifier mode specific UI elements
-        self.setup_amplifier_frame()
+    def log(self, message, tag="info"):
+        timestamp = datetime.datetime.now().strftime("[%H:%M:%S] ")
+        self.output_box.configure(state="normal")
+        self.output_box.insert("end", timestamp, "timestamp")
+        self.output_box.insert("end", message + "\n", tag)
+        self.output_box.see("end")
+        self.output_box.configure(state="disabled")
+
+    def style_log_tags(self):
+        self.output_box.tag_configure("info", foreground="blue")
+        self.output_box.tag_configure(
+            "error", foreground="red", font=("Consolas", 10, "bold")
+        )
+        self.output_box.tag_configure("success", foreground="green")
+        self.output_box.tag_configure("warning", foreground="orange")
+        self.output_box.tag_configure(
+            "timestamp", foreground="gray", font=("Consolas", 9, "italic")
+        )
 
     def on_device_type_change(self):
         """Handle device type selection"""
@@ -118,25 +341,49 @@ class MackIITMGUI:
         self.device_type = device_type
 
         # Hide all frames first
-        self.frame1.pack_forget()
-        self.frame2.pack_forget()
+        # self.device_select_frame.pack_forget()
+        # self.config_frame.pack_forget()
         self.frame3.pack_forget()
         self.amplifier_test_frame.pack_forget()
 
         if device_type == "amplifier":
             self.log("Amplifier mode selected", "info")
-            self.frame1.pack(pady=10)
+            self.device_select_frame.pack(pady=10)
         elif device_type == "phase_shifter":
             self.log("Phase Shifter mode selected", "info")
-            self.frame1.pack(pady=10)
+            self.device_select_frame.pack(pady=10)
         else:
             self.log("Please select a device type", "warning")
 
         self.connect_button.state(["!disabled"])
 
+    def setup_device_select_frame(self):
+        # Device Type Selection Frame (new)
+        self.device_type_frame = ttk.Frame(self.device_select_frame)
+        self.device_type_frame.pack(pady=10)
+        ttk.Label(self.device_type_frame, text="Select Device Type:").pack(
+            side="left", padx=(0, 10)
+        )
+
+        # Radio buttons for device type
+        device_types = {"Amplifier": "amplifier", "Phase Shifter": "phase_shifter"}
+        for text, value in device_types.items():
+            ttk.Radiobutton(
+                self.device_type_frame,
+                text=text,
+                variable=self.device_type_var,
+                value=value,
+                command=self.on_device_type_change,
+            ).pack(side="left", padx=5)
+
+        # Frame 1 - Connect button (shown after device type selection)
+        self.connect_button = ttk.Button(
+            self.device_select_frame, text="CONNECT", command=self.connect_devices
+        )
+        self.connect_button.pack(anchor="center")
+
     def setup_amplifier_frame(self):
         """Create special UI elements for Amplifier mode"""
-        self.amplifier_test_frame = ttk.Frame(self.content_frame)
 
         # Add amplifier-specific controls
         test_frame = ttk.Frame(self.amplifier_test_frame)
@@ -145,6 +392,123 @@ class MackIITMGUI:
         ttk.Button(
             test_frame, text="Save Traces", command=self.run_amplifier_test
         ).pack(pady=10)
+
+    def setup_calib_frame(self):
+        frame_content = ttk.Frame(self.calib_frame)
+        frame_content.pack(fill="both", expand=True, padx=10, pady=10)
+
+        # Configure grid weights for responsive layout
+        frame_content.columnconfigure(1, weight=1)
+        for i in range(4):
+            frame_content.rowconfigure(i, weight=1)
+
+        # Path selection section
+        ttk.Label(
+            frame_content,
+            text="Calibration Save Path:",
+            font=("TkDefaultFont", 10, "bold"),
+        ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 10))
+
+        ttk.Label(frame_content, text="Path:").grid(
+            row=1, column=0, sticky="w", padx=(0, 5), pady=5
+        )
+
+        self.calib_path_var = tk.StringVar(value="")
+        self.calib_path_entry = ttk.Entry(
+            frame_content, textvariable=self.calib_path_var, width=50
+        )
+        self.calib_path_entry.grid(row=1, column=1, sticky="ew", padx=5, pady=5)
+
+        self.browse_button = ttk.Button(
+            frame_content, text="Browse...", command=self.browse_calib_path
+        )
+        self.browse_button.grid(row=1, column=2, padx=(5, 0), pady=5)
+
+        # Instructions section
+        instruction_frame = ttk.LabelFrame(frame_content, text="Instructions")
+        instruction_frame.grid(row=2, column=0, columnspan=3, sticky="ew", pady=20)
+        instruction_frame.columnconfigure(0, weight=1)
+
+        instruction_text = "Click 'Next' after selecting folder to save in"
+        ttk.Label(
+            instruction_frame,
+            text=instruction_text,
+            font=("TkDefaultFont", 9),
+            foreground="blue",
+        ).pack(padx=10, pady=10)
+
+        # Save button section
+        button_frame = ttk.Frame(frame_content)
+        button_frame.grid(row=3, column=0, columnspan=3, pady=20)
+
+        self.save_ref_button = ttk.Button(
+            button_frame,
+            text="Save Reference Line",
+            command=self.save_ref_line,
+            style="Accent.TButton",
+        )
+
+        self.save_ref_button.pack()
+
+        self.next_button = ttk.Button(
+            button_frame,
+            text="Next",
+            command=self.go_next,
+            style="Accent.TButton",
+        )
+
+        self.next_button.pack()
+
+    def browse_calib_path(self):
+        """Open file dialog to select calibration save path"""
+        from tkinter import filedialog
+
+        # Ask for directory to save calibration files
+        directory = filedialog.askdirectory(
+            title="Select Directory to Save Data",
+            initialdir=self.calib_path_var.get() if self.calib_path_var.get() else ".",
+        )
+
+        if directory:
+            self.calib_path_var.set(directory)
+
+    def save_ref_line(self):
+        save_path = self.calib_path_var.get().strip()
+
+        if not save_path:
+            from tkinter import messagebox
+
+            messagebox.showerror("Error", "Please select a folder to save data.")
+            return
+
+        folder_path = f"{save_path}/ref_lines_{self.start_freq}-{self.stop_freq}"
+        os.makedirs(folder_path, exist_ok=True)
+        self.vna.save_traces_amp(folder_path, self.start_freq, self.stop_freq)
+
+    def go_next(self):
+        """Save calibration data to the specified path"""
+        save_path = self.calib_path_var.get().strip()
+
+        if not save_path:
+            from tkinter import messagebox
+
+            messagebox.showerror("Error", "Please select a folder to save data.")
+            return
+
+        try:
+            self.save_path = save_path
+            print(self.save_path)
+            self.calib_frame.pack_forget()
+            self.device_select_frame.pack(fill="x", pady=10)
+
+        except Exception as e:
+            from tkinter import messagebox
+
+            messagebox.showerror("Error", f"Failed to save calibration data:\n{str(e)}")
+
+    def get_calib_path(self):
+        """Returns the selected calibration save path"""
+        return self.calib_path_var.get().strip()
 
     def run_amplifier_test(self):
         """Run the amplifier test in a separate thread"""
@@ -157,7 +521,7 @@ class MackIITMGUI:
 
     def _run_amplifier_test(self):
         """Perform the actual amplifier test"""
-        folder_name = datetime.datetime.now().strftime("measurement_%Y-%m-%d_%H-%M-%S")
+        folder_name = f"{self.save_path}/{datetime.datetime.now().strftime('measurement_%Y-%m-%d_%H-%M-%S')}"
         os.makedirs(folder_name, exist_ok=True)
         try:
             self.vna.save_traces_amp(
@@ -234,6 +598,358 @@ class MackIITMGUI:
         self.setup_single_frame()
         self.setup_all_state_frame()
         self.setup_upload_frame()
+
+    def setup_config_frame(self):
+        frame_content = ttk.Frame(self.config_frame)
+        frame_content.pack(fill="x", expand=True, padx=10, pady=10)
+
+        # Configure grid weights
+        for i in range(6):
+            frame_content.columnconfigure(i, weight=1)
+        for i in range(8):  # Increased rows for additional content
+            frame_content.rowconfigure(i, weight=1)
+
+        # Frequency and measurement parameters
+        self.config_start_freq_entry = self.add_labeled_entry(
+            frame_content, "Sweep Start Frequency", 0, 0
+        )
+        self.config_stop_freq_entry = self.add_labeled_entry(
+            frame_content, "Sweep Stop Frequency", 0, 2
+        )
+        self.config_average_entry = self.add_labeled_entry(
+            frame_content, "Average", 0, 4
+        )
+        self.config_sweep_points_entry = self.add_labeled_entry(
+            frame_content, "Sweep Points", 1, 0
+        )
+
+        # Port selection with number fields
+        port_frame = ttk.LabelFrame(frame_content, text="Port Configuration")
+        port_frame.grid(row=2, column=0, columnspan=6, sticky="ew", pady=10)
+
+        ttk.Label(port_frame, text="Port 1:").grid(row=0, column=0, padx=5, pady=5)
+        self.port1_var = tk.StringVar(value="1")
+        self.port1_entry = ttk.Entry(port_frame, textvariable=self.port1_var, width=5)
+        self.port1_entry.grid(row=0, column=1, padx=5, pady=5)
+        self.port1_entry.bind("<KeyRelease>", self.update_sparams)
+
+        ttk.Label(port_frame, text="Port 2:").grid(row=0, column=2, padx=5, pady=5)
+        self.port2_var = tk.StringVar(value="2")
+        self.port2_entry = ttk.Entry(port_frame, textvariable=self.port2_var, width=5)
+        self.port2_entry.grid(row=0, column=3, padx=5, pady=5)
+        self.port2_entry.bind("<KeyRelease>", self.update_sparams)
+
+        # Initialize port list
+        self.port_vars = [self.port1_var, self.port2_var]
+        self.port_entries = [self.port1_entry, self.port2_entry]
+
+        # S-parameter selection frame
+        self.sparams_frame = ttk.LabelFrame(frame_content, text="S-Parameters")
+        self.sparams_frame.grid(row=3, column=0, columnspan=6, sticky="ew", pady=10)
+
+        # Initialize S-parameter variables dictionary
+        self.sparam_vars = {}
+
+        # Create initial S-parameter checkboxes
+        self.update_sparams()
+
+        # Buttons
+        button_frame = ttk.Frame(frame_content)
+        button_frame.grid(row=4, column=0, columnspan=6, pady=10)
+
+        self.load_config_button = ttk.Button(
+            button_frame, text="Load Config", command=self.load_config
+        )
+        self.setup_config_button = ttk.Button(
+            button_frame, text="Configure", command=self.configure_vna
+        )
+        self.skip_button = ttk.Button(
+            button_frame, text="Skip", command=self.skip_calib
+        )
+
+        self.load_config_button.pack(side="left", padx=10)
+        self.setup_config_button.pack(side="left", padx=10)
+        self.skip_button.pack(side="left", padx=10)
+
+    def load_config(self):
+        """Load configuration from a JSON file and populate the form fields"""
+        try:
+            # Open file dialog to select JSON file
+            file_path = filedialog.askopenfilename(
+                title="Select Configuration File",
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            )
+
+            if not file_path:
+                return  # User cancelled the dialog
+
+            # Read and parse the JSON file
+            with open(file_path, "r") as file:
+                config_data = json.load(file)
+
+            # Populate the configuration fields
+            if "start_frequency" in config_data and hasattr(
+                self, "config_start_freq_entry"
+            ):
+                self.config_start_freq_entry.delete(0, tk.END)
+                self.config_start_freq_entry.insert(
+                    0, str(config_data["start_frequency"])
+                )
+
+            if "stop_frequency" in config_data and hasattr(
+                self, "config_stop_freq_entry"
+            ):
+                self.config_stop_freq_entry.delete(0, tk.END)
+                self.config_stop_freq_entry.insert(
+                    0, str(config_data["stop_frequency"])
+                )
+
+            if "average" in config_data and hasattr(self, "config_average_entry"):
+                self.config_average_entry.delete(0, tk.END)
+                self.config_average_entry.insert(0, str(config_data["average"]))
+
+            if "sweep_points" in config_data and hasattr(
+                self, "config_sweep_points_entry"
+            ):
+                self.config_sweep_points_entry.delete(0, tk.END)
+                self.config_sweep_points_entry.insert(
+                    0, str(config_data["sweep_points"])
+                )
+
+            # Update port configurations if present
+            if "port1" in config_data and hasattr(self, "port1_var"):
+                self.port1_var.set(str(config_data["port1"]))
+
+            if "port2" in config_data and hasattr(self, "port2_var"):
+                self.port2_var.set(str(config_data["port2"]))
+
+            # Update S-parameter selections if present
+            if "sparameters" in config_data and hasattr(self, "sparam_vars"):
+                # First, uncheck all current S-parameters
+                for var in self.sparam_vars.values():
+                    var.set(False)
+
+                # Then check the ones specified in the config
+                for sparam in config_data["sparameters"]:
+                    if sparam in self.sparam_vars:
+                        self.sparam_vars[sparam].set(True)
+
+            # Update S-parameters display in case ports changed
+            self.update_sparams()
+
+            messagebox.showinfo("Success", f"Configuration loaded from {file_path}")
+
+        except FileNotFoundError:
+            messagebox.showerror("Error", "Configuration file not found.")
+        except json.JSONDecodeError:
+            messagebox.showerror("Error", "Invalid JSON file format.")
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to load configuration: {str(e)}")
+
+    def save_config(self):
+        """Save current configuration to a JSON file (optional companion function)"""
+        try:
+            # Collect current configuration
+            config_data = {}
+
+            if hasattr(self, "config_start_freq_entry"):
+                config_data["start_frequency"] = self.config_start_freq_entry.get()
+
+            if hasattr(self, "config_stop_freq_entry"):
+                config_data["stop_frequency"] = self.config_stop_freq_entry.get()
+
+            if hasattr(self, "config_average_entry"):
+                config_data["average"] = self.config_average_entry.get()
+
+            if hasattr(self, "config_sweep_points_entry"):
+                config_data["sweep_points"] = self.config_sweep_points_entry.get()
+
+            if hasattr(self, "port1_var"):
+                config_data["port1"] = self.port1_var.get()
+
+            if hasattr(self, "port2_var"):
+                config_data["port2"] = self.port2_var.get()
+
+            # Get selected S-parameters
+            if hasattr(self, "sparam_vars"):
+                selected_sparams = [
+                    sparam for sparam, var in self.sparam_vars.items() if var.get()
+                ]
+                config_data["sparameters"] = selected_sparams
+
+            # Open file dialog to save JSON file
+            file_path = filedialog.asksaveasfilename(
+                title="Save Configuration File",
+                defaultextension=".json",
+                filetypes=[("JSON files", "*.json"), ("All files", "*.*")],
+            )
+
+            if not file_path:
+                return  # User cancelled the dialog
+
+            # Write the JSON file
+            with open(file_path, "w") as file:
+                json.dump(config_data, file, indent=4)
+
+            messagebox.showinfo("Success", f"Configuration saved to {file_path}")
+
+        except Exception as e:
+            messagebox.showerror("Error", f"Failed to save configuration: {str(e)}")
+
+    def skip_calib(self):
+        self.config_frame.pack_forget()
+        self.frame2.pack(fill="x", pady=10)
+        # self.calib_frame.pack()
+
+    def update_sparams(self, event=None):
+        """Update S-parameter checkboxes based on current port values"""
+        # Clear existing checkboxes
+        for widget in self.sparams_frame.winfo_children():
+            widget.destroy()
+
+        self.sparam_vars.clear()
+
+        # Get current port values
+        ports = []
+        for port_var in self.port_vars:
+            try:
+                port_val = port_var.get().strip()
+                if port_val:
+                    ports.append(port_val)
+            except:
+                continue
+
+        if len(ports) < 2:
+            return
+
+        # Generate all possible S-parameter combinations
+        sparams = []
+        for i in ports:
+            for j in ports:
+                sparams.append(f"S{i}{j}")
+
+        # Create table header
+        ttk.Label(
+            self.sparams_frame, text="Parameter", font=("TkDefaultFont", 9, "bold")
+        ).grid(row=0, column=0, padx=10, pady=5, sticky="w")
+        ttk.Label(
+            self.sparams_frame, text="dB", font=("TkDefaultFont", 9, "bold")
+        ).grid(row=0, column=1, padx=10, pady=5)
+        ttk.Label(
+            self.sparams_frame, text="deg", font=("TkDefaultFont", 9, "bold")
+        ).grid(row=0, column=2, padx=10, pady=5)
+
+        # Create separator line
+        separator = ttk.Separator(self.sparams_frame, orient="horizontal")
+        separator.grid(row=1, column=0, columnspan=3, sticky="ew", pady=2)
+
+        # Create checkboxes for each S-parameter in table format
+        for idx, sparam in enumerate(sparams):
+            sparam_lower = sparam.lower()
+            row = idx + 2  # Start from row 2 (after header and separator)
+
+            # S-parameter label
+            ttk.Label(self.sparams_frame, text=sparam).grid(
+                row=row, column=0, padx=10, pady=2, sticky="w"
+            )
+
+            # dB checkbox
+            db_var_name = f"{sparam_lower}_db"
+            self.sparam_vars[db_var_name] = tk.BooleanVar(value=True)
+            db_checkbox = ttk.Checkbutton(
+                self.sparams_frame, variable=self.sparam_vars[db_var_name]
+            )
+            db_checkbox.grid(row=row, column=1, padx=10, pady=2)
+
+            # Degree checkbox
+            deg_var_name = f"{sparam_lower}_deg"
+            self.sparam_vars[deg_var_name] = tk.BooleanVar(value=True)
+            deg_checkbox = ttk.Checkbutton(
+                self.sparams_frame, variable=self.sparam_vars[deg_var_name]
+            )
+            deg_checkbox.grid(row=row, column=2, padx=10, pady=2)
+
+    def get_selected_sparams(self):
+        """Returns a dictionary of selected S-parameters and their format options"""
+        selected = {}
+
+        # Get unique S-parameter names
+        sparams = set()
+        for var_name in self.sparam_vars.keys():
+            if var_name.endswith("_db") or var_name.endswith("_deg"):
+                sparam_name = var_name.replace("_db", "").replace("_deg", "")
+                sparams.add(sparam_name)
+
+        # Check which formats are selected for each S-parameter
+        print(self.sparam_vars)
+        for i, sparam in enumerate(self.sparam_vars.keys()):
+            # db_selected = self.sparam_vars.get(f"{sparam}_db", tk.BooleanVar()).get()
+            # deg_selected = self.sparam_vars.get(f"{sparam}_deg", tk.BooleanVar()).get()
+            status = self.sparam_vars.get(sparam, tk.BooleanVar()).get()
+
+            # Only include if at least one format is selected
+            if status:
+                selected[f"{sparam}-Trc_{i + 1}"] = sparam.split("_")[1]
+
+        print(selected)
+
+        return selected
+
+    def get_port_config(self):
+        """Returns the list of configured ports"""
+        ports = []
+        for port_var in self.port_vars:
+            try:
+                port_val = port_var.get().strip()
+                if port_val:
+                    ports.append(int(port_val))
+            except ValueError:
+                continue
+        return ports
+
+    def configure_vna(self):
+        try:
+            start_freq = float(self.config_start_freq_entry.get())
+            end_freq = float(self.config_stop_freq_entry.get())
+            sweep_points = float(self.config_sweep_points_entry.get())
+            avg = float(self.config_average_entry.get())
+
+            params = self.get_selected_sparams()
+            print(params)
+
+            self.vna.write_command(
+                f"SENS:FREQ:START {start_freq * 10**9}"
+            )  # TODO: uncomment
+            self.vna.write_command(f"SENS:FREQ:STOP {end_freq * 10**9}")
+            self.vna.write_command(f"SENS:SWE:POIN {sweep_points}")
+            self.vna.write_command(f"SENS:AVER:COUN {avg}")
+
+            for para in params.keys():
+                name = para.upper()
+                parameter = para.split("-")[0].split("_")[0].upper()
+                print(name, parameter)
+
+                if params[para] == "db":
+                    self.vna.create_trace(
+                        name=f"{name} dB",
+                        parameter=parameter,
+                        unit="db",
+                    )
+                elif params[para] == "deg":
+                    self.vna.create_trace(
+                        name=f"{name} deg",
+                        parameter=parameter,
+                        unit="deg",
+                    )
+
+            self.config_frame.pack_forget()
+            self.frame2.pack(fill="x", pady=10)
+            # self.calib_frame.pack()
+
+            self.log("VNA values set", "success")
+
+        except ValueError:
+            self.log("[ERROR] Enter Valid Inputs", "error")
 
     def update_delay(self, event=None):
         """Update delay value when user changes the entry"""
@@ -324,15 +1040,7 @@ class MackIITMGUI:
             "timestamp", foreground="gray", font=("Consolas", 9, "italic")
         )
 
-    def connect_devices(self):
-        if self.device_type == "phase_shifter":
-            self.fpga.initialize_fpga()
-
-            if self.fpga.connected:
-                self.log_threadsafe("FPGA Successfully Connected", "success")
-            else:
-                self.log_threadsafe("[ERROR] FPGA Not Connected", "error")
-
+    def connect_vna(self):
         try:
             self.vna.initialize_vna()
         except Exception:
@@ -343,8 +1051,45 @@ class MackIITMGUI:
 
         if self.vna.connected:
             self.log_threadsafe("VNA Successfully Connected", "success")
+
+            self.vna_connect_button.state(["disabled"])
+
+            if self.vna.get_vendor_name() == "Keysight":
+                self.vna.write_command("INIT:CONT ON")
+                self.config_frame.pack(fill="x", pady=10)
+            else:
+                # self.config_frame.pack(fill="x", pady=10)  # TODO: comment this
+                self.frame2.pack(fill="x", pady=10)  # TODO: Uncomment this
         else:
             self.log_threadsafe("[ERROR] VNA Connection Failed", "error")
+
+    def connect_devices(self):
+        try:
+            self.device_type
+        except:
+            self.log_threadsafe("[ERROR] Select one of the options", "error")
+            return
+
+        if self.device_type == "phase_shifter":
+            self.fpga.initialize_fpga()
+
+            if self.fpga.connected:
+                self.log_threadsafe("FPGA Successfully Connected", "success")
+            else:
+                self.log_threadsafe("[ERROR] FPGA Not Connected", "error")
+
+            # try:
+            #     self.vna.initialize_vna()
+            # except Exception:
+            #     # pass
+            #     self.log_threadsafe(
+            #         "[ERROR] Could not locate a VISA implementation", tag="error"
+            #     )
+
+            # if self.vna.connected:
+            #     self.log_threadsafe("VNA Successfully Connected", "success")
+            # else:
+            #     self.log_threadsafe("[ERROR] VNA Connection Failed", "error")
 
         if (
             self.fpga.connected
@@ -352,7 +1097,19 @@ class MackIITMGUI:
             and self.device_type == "phase_shifter"
         ) or (self.vna.connected and self.device_type == "amplifier"):
             self.connect_button.state(["disabled"])
-            self.frame2.pack(fill="x", pady=10)
+
+        if self.vna.get_vendor_name() == "Keysight":
+            self.vna.write_command("INIT:CONT ON")
+        # Different behavior depending on device type
+        if self.device_type_var.get() == "phase_shifter":
+            self.frame3.pack()
+            self.log(
+                "Phase shifter measurement configuration successful.",
+                "success",
+            )
+        else:  # amplifier mode
+            self.amplifier_test_frame.pack(fill="x", pady=10)
+            self.log("Amplifier measurement configuration successful.", "success")
 
     def configure_measurement(self):
         try:
@@ -360,6 +1117,7 @@ class MackIITMGUI:
             stop_freq = float(self.stop_freq_entry.get())
 
             freq_range, _ = self.vna.get_trace_info()
+            print(freq_range[0], freq_range[-1], start_freq, stop_freq)
 
             if (
                 freq_range[0] <= start_freq < stop_freq <= freq_range[-1]
@@ -368,18 +1126,7 @@ class MackIITMGUI:
                 self.start_freq = start_freq
                 self.stop_freq = stop_freq
 
-                # Different behavior depending on device type
-                if self.device_type_var.get() == "phase_shifter":
-                    self.frame3.pack()
-                    self.log(
-                        "Phase shifter measurement configuration successful. Choose a transmission mode.",
-                        "success",
-                    )
-                else:  # amplifier mode
-                    self.amplifier_test_frame.pack(fill="x", pady=10)
-                    self.log(
-                        "Amplifier measurement configuration successful.", "success"
-                    )
+                self.calib_frame.pack()
 
             else:
                 self.log("[ERROR] Frequency range not within sweep range", "error")
@@ -406,7 +1153,13 @@ class MackIITMGUI:
         self.mode_var.set("")
 
         # Hide all mode-specific frames
-        for frame in [self.single_frame, self.all_state_frame, self.upload_frame]:
+        for frame in [
+            self.single_frame,
+            self.all_state_frame,
+            self.upload_frame,
+            self.device_select_frame,
+            self.calib_frame,
+        ]:
             frame.pack_forget()
 
         # Clear entries in all modes
@@ -451,9 +1204,7 @@ class MackIITMGUI:
     def start_test(self, mode):
         print(self.delay)
         try:
-            folder_name = datetime.datetime.now().strftime(
-                "measurement_%Y-%m-%d_%H-%M-%S"
-            )
+            folder_name = f"{self.save_path}/{datetime.datetime.now().strftime('measurement_%Y-%m-%d_%H-%M-%S')}"
             os.makedirs(folder_name, exist_ok=True)
 
             if mode == "csv":
