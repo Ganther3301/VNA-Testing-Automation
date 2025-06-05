@@ -486,6 +486,7 @@ class MackIITMGUI:
         folder_path = f"{save_path}/ref_lines_{self.start_freq}-{self.stop_freq}"
         os.makedirs(folder_path, exist_ok=True, mode=0o777)
         self.vna.save_traces_amp(folder_path, self.start_freq, self.stop_freq)
+        self.log("Reference values saved", "success")
 
     def go_next(self):
         """Save calibration data to the specified path"""
@@ -544,10 +545,10 @@ class MackIITMGUI:
             frame_content.columnconfigure(i, weight=1)
 
         self.start_freq_entry = self.add_labeled_entry(
-            frame_content, "Start Frequency", 0, 0
+            frame_content, "Start Frequency", 1, 0
         )
         self.stop_freq_entry = self.add_labeled_entry(
-            frame_content, "Stop Frequency", 0, 2
+            frame_content, "Stop Frequency", 1, 2
         )
 
         self.start_freq_entry.bind("<KeyRelease>", self.hide_frame3_on_change)
@@ -555,7 +556,12 @@ class MackIITMGUI:
         self.config_button = ttk.Button(
             frame_content, text="CONFIGURE", command=self.configure_measurement
         )
-        self.config_button.grid(row=0, column=6, padx=10)
+        self.config_button.grid(row=1, column=6, padx=10)
+
+        back_button = ttk.Button(
+            frame_content, text="Back", command=self.go_back_to_config
+        )
+        back_button.grid(row=0, column=0, sticky="w", pady=(0, 10), padx=(0, 5))
 
     def setup_frame3(self):
         self.radio_panel = ttk.Frame(self.frame3)
@@ -668,10 +674,24 @@ class MackIITMGUI:
         self.skip_button = ttk.Button(
             button_frame, text="Skip", command=self.skip_calib
         )
-
         self.load_config_button.pack(side="left", padx=10)
         self.setup_config_button.pack(side="left", padx=10)
         self.skip_button.pack(side="left", padx=10)
+
+    def go_back_to_config(self):
+        # Hide all frames in the testing tab
+        for frame in [
+            self.vna_connect_frame,
+            self.device_select_frame,
+            self.frame2,
+            self.frame3,
+            self.calib_frame,
+            self.amplifier_test_frame,
+        ]:
+            frame.pack_forget()
+
+        # Show only the config frame
+        self.config_frame.pack(fill="x", pady=10)
 
     def load_config(self):
         """Load configuration from a JSON file and populate the form fields"""
@@ -857,7 +877,7 @@ class MackIITMGUI:
 
             # dB checkbox
             db_var_name = f"{sparam_lower}_db"
-            self.sparam_vars[db_var_name] = tk.BooleanVar(value=True)
+            self.sparam_vars[db_var_name] = tk.BooleanVar(value=False)
             db_checkbox = ttk.Checkbutton(
                 self.sparams_frame, variable=self.sparam_vars[db_var_name]
             )
@@ -865,7 +885,7 @@ class MackIITMGUI:
 
             # Degree checkbox
             deg_var_name = f"{sparam_lower}_deg"
-            self.sparam_vars[deg_var_name] = tk.BooleanVar(value=True)
+            self.sparam_vars[deg_var_name] = tk.BooleanVar(value=False)
             deg_checkbox = ttk.Checkbutton(
                 self.sparams_frame, variable=self.sparam_vars[deg_var_name]
             )
