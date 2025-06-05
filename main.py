@@ -272,6 +272,7 @@ class MackIITMGUI:
 
         with pd.ExcelWriter(
             f"{self.analysis_save_path}/Analysis_{equi_bits}.xlsx",
+            engine="openpyxl",
             mode="a",
             if_sheet_exists="replace",
         ) as writer:
@@ -279,6 +280,7 @@ class MackIITMGUI:
 
         with pd.ExcelWriter(
             f"{self.analysis_save_path}/PS_MAX_RMS_MIN_{equi_bits}.xlsx",
+            engine="openpyxl",
             mode="a",
             if_sheet_exists="replace",
         ) as writer:
@@ -482,7 +484,7 @@ class MackIITMGUI:
             return
 
         folder_path = f"{save_path}/ref_lines_{self.start_freq}-{self.stop_freq}"
-        os.makedirs(folder_path, exist_ok=True)
+        os.makedirs(folder_path, exist_ok=True, mode=0o777)
         self.vna.save_traces_amp(folder_path, self.start_freq, self.stop_freq)
 
     def go_next(self):
@@ -522,7 +524,7 @@ class MackIITMGUI:
     def _run_amplifier_test(self):
         """Perform the actual amplifier test"""
         folder_name = f"{self.save_path}/{datetime.datetime.now().strftime('measurement_%Y-%m-%d_%H-%M-%S')}"
-        os.makedirs(folder_name, exist_ok=True)
+        os.makedirs(folder_name, exist_ok=True, mode=0o777)
         try:
             self.vna.save_traces_amp(
                 folder_name, self.start_freq, self.stop_freq
@@ -1205,7 +1207,7 @@ class MackIITMGUI:
         print(self.delay)
         try:
             folder_name = f"{self.save_path}/{datetime.datetime.now().strftime('measurement_%Y-%m-%d_%H-%M-%S')}"
-            os.makedirs(folder_name, exist_ok=True)
+            os.makedirs(folder_name, exist_ok=True, mode=0o777)
 
             if mode == "csv":
                 try:

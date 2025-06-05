@@ -129,7 +129,7 @@ class BaseVNA(ABC):
         trace_values = self.get_trace_data()
 
         # Create folder if it doesn't exist
-        os.makedirs(folder_name, exist_ok=True)
+        os.makedirs(folder_name, exist_ok=True, mode=0o777)
 
         for i, name in enumerate(trace_names):
             if name not in os.listdir(folder_name):
@@ -143,7 +143,7 @@ class BaseVNA(ABC):
                             str(v)
                             + self.sep
                             + str(trace_values[j + (i * steps)])
-                            + f"{self.sep}\n"
+                            + "\n"
                         )
                         f.write(h)
 
@@ -167,7 +167,7 @@ class BaseVNA(ABC):
         trace_values = self.get_trace_data()
 
         # Create folder if it doesn't exist
-        os.makedirs(folder_name, exist_ok=True)
+        os.makedirs(folder_name, exist_ok=True, mode=0o777)
 
         for i, name in enumerate(trace_names):
             if name not in os.listdir(folder_name):
@@ -192,7 +192,7 @@ class BaseVNA(ABC):
                                 )
                             )
                         )
-                        + f"{self.sep}\n"
+                        + "\n"
                     )
                     f.write(h)
 
@@ -211,7 +211,7 @@ class BaseVNA(ABC):
                             )
                         )
                     )
-                    + f"{self.sep}\n"
+                    + "\n"
                 )
                 f.write(vals)
 
