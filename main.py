@@ -35,9 +35,8 @@ class MackIITMGUI:
         self.test_running = False
 
         self.phase_file_path = ""
-        self.analysis_save_path = ""  # Changed from amplitude_file_paths
+        self.analysis_save_path = ""
 
-        # Title
         self.title_label = ttk.Label(
             self.root,
             text="MACK IITM TESTING SYSTEM",
@@ -51,6 +50,13 @@ class MackIITMGUI:
 
         self.pause_event = threading.Event()
         self.cancel_event = threading.Event()
+
+        self.trigger_states = {
+            ("Receiver", "Phase Shifter"): (0, 128),
+            ("Receiver", "Attenuator"): (0, 128),
+            ("Transmitter", "Phase Shifter"): (0, 128),
+            ("Transmitter", "Attenuator"): (0, 128),
+        }
 
     def create_widgets(self):
         self.tab_control = ttk.Notebook(self.root)
@@ -118,6 +124,19 @@ class MackIITMGUI:
         )
         self.phase_csv_label.pack(pady=2)
 
+        ttk.Button(
+            analysis_container,
+            text="Upload Amplitude CSV",
+            command=self.upload_amp_csv,
+        ).pack(pady=5)
+
+        self.amp_csv_label = ttk.Label(
+            analysis_container,
+            text="No amplitude file selected",
+            font=("Arial", 9, "italic"),
+        )
+        self.amp_csv_label.pack(pady=2)
+
         # Changed from amplitude files to save location
         ttk.Button(
             analysis_container,
@@ -135,6 +154,17 @@ class MackIITMGUI:
         ttk.Button(
             analysis_container, text="Run Analysis", command=self.run_analysis
         ).pack(pady=15)
+
+    def upload_amp_csv(self):
+        file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
+        if file_path:
+            self.amp_file_path = file_path
+            filename = os.path.basename(file_path)
+            self.amp_csv_label.config(text=f"Amplitude file: {filename}")
+            self.log(f"[Analysis] Amplitude CSV uploaded: {filename}", "info")
+        else:
+            self.amp_csv_label.config(text="No CSV file selected")
+            self.log("[Analysis] Amplitude CSV upload cancelled.", "warning")
 
     def upload_phase_csv(self):
         file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
@@ -174,6 +204,10 @@ class MackIITMGUI:
             self.log("[ERROR] Please upload a phase CSV file.", "error")
             return
 
+        if not self.amp_file_path:
+            self.log("[ERROR] Please upload a amplitude CSV file.", "error")
+            return
+
         if not self.analysis_save_path:
             self.log("[ERROR] Please select a save location.", "error")
             return
@@ -184,6 +218,13 @@ class MackIITMGUI:
             # "/home/ganther/Hithesh/Projects/MACK/VNA_automation/results/measurements with report/15.5-17.5_Trc3.csv",
             # "/home/ganther/Hithesh/Projects/MACK/VNA_automation/results/measurement 201 points/15.5-17.5_Trc6.csv",
             self.phase_file_path,
+            index_col=0,
+        )
+
+        amp_data = pd.read_csv(
+            # "/home/ganther/Hithesh/Projects/MACK/VNA_automation/results/measurements with report/15.5-17.5_Trc3.csv",
+            # "/home/ganther/Hithesh/Projects/MACK/VNA_automation/results/measurement 201 points/15.5-17.5_Trc6.csv",
+            self.amp_file_path,
             index_col=0,
         )
 
@@ -222,19 +263,23 @@ class MackIITMGUI:
 
             print(f"Max z: {max(z)}, Min z: {min(z)}")
             print(O_column)
-            return pd.DataFrame(re_arr)
+            return pd.DataFrame(re_arr), O_column
 
         # Method 1: Process all columns and store re_arranged in a dictionary
         re_arranged = {}
         rmse_values = {}
         max_min_errors = {}
         ideal_df = pd.DataFrame(ideal)
+        re_arr_amp = amp_data.copy()
 
-        for column in base_data.columns:
+        for i, column in enumerate(base_data.columns):
             print(f"Processing column: {column}")
 
             # Process the column
-            fixed = process_it(base_data[column])
+            fixed, ocol = process_it(base_data[column])
+            for j, col in enumerate(ocol):
+                print(col)
+                re_arr_amp.iloc[j, i] = amp_data.iloc[col - 1, i]
 
             # Calculate RMSE
             diff = ideal_df - fixed
@@ -288,6 +333,8 @@ class MackIITMGUI:
             pd.Series(rmse_values).to_excel(writer, sheet_name="RMS")
             # re_arranged_df.to_excel(writer, sheet_name="re_arranged")
 
+        re_arr_amp.to_excel(f"{self.analysis_save_path}/AMP_{equi_bits}.xlsx")
+
         self.log(f"Equibits: {equibits}", "info")
         self.log(f"Phase file: {os.path.basename(self.phase_file_path)}", "info")
         self.log(f"Save location: {self.analysis_save_path}", "info")
@@ -299,6 +346,9 @@ class MackIITMGUI:
         # Console shared by both tabs
         self.console_frame = ttk.Frame(self.root, padding=10)
         self.console_frame.grid(row=2, column=0, sticky="ew", padx=20, pady=(0, 10))
+
+        self.console_frame.configure(height=150)
+        self.console_frame.grid_propagate(False)
 
         output_frame = ttk.Frame(self.console_frame)
         output_frame.pack(fill="both", expand=True)
@@ -338,15 +388,12 @@ class MackIITMGUI:
         )
 
     def on_device_type_change(self):
-        """Handle device type selection"""
         device_type = self.device_type_var.get()
         self.device_type = device_type
 
-        # Hide all frames first
-        # self.device_select_frame.pack_forget()
-        # self.config_frame.pack_forget()
         self.frame3.pack_forget()
         self.amplifier_test_frame.pack_forget()
+        self.ku_trm_options_frame.pack_forget()
 
         if device_type == "amplifier":
             self.log("Amplifier mode selected", "info")
@@ -354,21 +401,27 @@ class MackIITMGUI:
         elif device_type == "phase_shifter":
             self.log("Phase Shifter mode selected", "info")
             self.device_select_frame.pack(pady=10)
+        elif device_type == "ku_trm":
+            self.log("KU TRM Module selected", "info")
+            self.device_select_frame.pack(pady=10)
+            self.ku_trm_options_frame.pack(pady=5)
         else:
             self.log("Please select a device type", "warning")
 
         self.connect_button.state(["!disabled"])
 
     def setup_device_select_frame(self):
-        # Device Type Selection Frame (new)
         self.device_type_frame = ttk.Frame(self.device_select_frame)
         self.device_type_frame.pack(pady=10)
         ttk.Label(self.device_type_frame, text="Select Device Type:").pack(
             side="left", padx=(0, 10)
         )
 
-        # Radio buttons for device type
-        device_types = {"Amplifier": "amplifier", "Phase Shifter": "phase_shifter"}
+        device_types = {
+            "Amplifier": "amplifier",
+            "Phase Shifter": "phase_shifter",
+            "KU TRM Module": "ku_trm",
+        }
         for text, value in device_types.items():
             ttk.Radiobutton(
                 self.device_type_frame,
@@ -378,11 +431,28 @@ class MackIITMGUI:
                 command=self.on_device_type_change,
             ).pack(side="left", padx=5)
 
-        # Frame 1 - Connect button (shown after device type selection)
         self.connect_button = ttk.Button(
             self.device_select_frame, text="CONNECT", command=self.connect_devices
         )
         self.connect_button.pack(anchor="center")
+
+        self.ku_trm_options_frame = ttk.Frame(self.device_select_frame)
+
+        self.role_var = tk.StringVar(value="Transmitter")
+        self.role_dropdown = ttk.Combobox(
+            self.ku_trm_options_frame,
+            textvariable=self.role_var,
+            values=["Transmitter", "Receiver"],
+            state="readonly",
+        )
+
+        self.module_type_var = tk.StringVar(value="Phase Shifter")
+        self.module_type_dropdown = ttk.Combobox(
+            self.ku_trm_options_frame,
+            textvariable=self.module_type_var,
+            values=["Phase Shifter", "Attenuator"],
+            state="readonly",
+        )
 
     def setup_amplifier_frame(self):
         """Create special UI elements for Amplifier mode"""
@@ -561,7 +631,8 @@ class MackIITMGUI:
         back_button = ttk.Button(
             frame_content, text="Back", command=self.go_back_to_config
         )
-        back_button.grid(row=0, column=0, sticky="w", pady=(0, 10), padx=(0, 5))
+        if self.vna.get_vendor_name() == "Keysight":
+            back_button.grid(row=0, column=0, sticky="w", pady=(0, 10), padx=(0, 5))
 
     def setup_frame3(self):
         self.radio_panel = ttk.Frame(self.frame3)
@@ -1051,17 +1122,6 @@ class MackIITMGUI:
             entry.pack(side="left")
         return entry
 
-    def style_log_tags(self):
-        self.output_box.tag_configure("info", foreground="blue")
-        self.output_box.tag_configure(
-            "error", foreground="red", font=("Consolas", 10, "bold")
-        )
-        self.output_box.tag_configure("success", foreground="green")
-        self.output_box.tag_configure("warning", foreground="orange")
-        self.output_box.tag_configure(
-            "timestamp", foreground="gray", font=("Consolas", 9, "italic")
-        )
-
     def connect_vna(self):
         try:
             self.vna.initialize_vna()
@@ -1092,7 +1152,7 @@ class MackIITMGUI:
             self.log_threadsafe("[ERROR] Select one of the options", "error")
             return
 
-        if self.device_type == "phase_shifter":
+        if self.device_type in ["phase_shifter", "ku_trm"]:
             self.fpga.initialize_fpga()
 
             if self.fpga.connected:
@@ -1100,36 +1160,26 @@ class MackIITMGUI:
             else:
                 self.log_threadsafe("[ERROR] FPGA Not Connected", "error")
 
-            # try:
-            #     self.vna.initialize_vna()
-            # except Exception:
-            #     # pass
-            #     self.log_threadsafe(
-            #         "[ERROR] Could not locate a VISA implementation", tag="error"
-            #     )
-
-            # if self.vna.connected:
-            #     self.log_threadsafe("VNA Successfully Connected", "success")
-            # else:
-            #     self.log_threadsafe("[ERROR] VNA Connection Failed", "error")
-
         if (
             self.fpga.connected
             and self.vna.connected
-            and self.device_type == "phase_shifter"
+            and self.device_type in ["phase_shifter", "ku_trm"]
         ) or (self.vna.connected and self.device_type == "amplifier"):
             self.connect_button.state(["disabled"])
 
         if self.vna.get_vendor_name() == "Keysight":
             self.vna.write_command("INIT:CONT ON")
-        # Different behavior depending on device type
-        if self.device_type_var.get() == "phase_shifter":
+
+        if self.device_type in ["phase_shifter", "ku_trm"]:
+            if self.device_type == "ku_trm":
+                self.role_dropdown.pack(side="left", padx=5)
+                self.module_type_dropdown.pack(side="left", padx=5)
             self.frame3.pack()
             self.log(
-                "Phase shifter measurement configuration successful.",
+                f"{'Phase shifter' if self.device_type == 'phase_shifter' else 'KU TRM Module'} measurement configuration successful.",
                 "success",
             )
-        else:  # amplifier mode
+        else:
             self.amplifier_test_frame.pack(fill="x", pady=10)
             self.log("Amplifier measurement configuration successful.", "success")
 
@@ -1224,10 +1274,11 @@ class MackIITMGUI:
         self.root.after(0, lambda: self.log(message, tag))
 
     def start_test(self, mode):
-        print(self.delay)
         try:
             folder_name = f"{self.save_path}/{datetime.datetime.now().strftime('measurement_%Y-%m-%d_%H-%M-%S')}"
             os.makedirs(folder_name, exist_ok=True, mode=0o777)
+            print(self.role_var.get())
+            print(self.module_type_var.get())
 
             if mode == "csv":
                 try:
@@ -1249,12 +1300,33 @@ class MackIITMGUI:
                             self.test_running = False
                             return
                         bits = int(self.n_bits_entry.get())
-                        if max(states) > 2**bits:
-                            self.log_threadsafe(
-                                "[ERROR] CSV has a state greater than the number of states",
-                                "error",
-                            )
-                            return
+
+                        if self.device_type_var == "phase_shifter":
+                            if max(states) > 2**bits:
+                                self.log_threadsafe(
+                                    "[ERROR] CSV has a state greater than the number of states",
+                                    "error",
+                                )
+                                return
+
+                        if self.device_type_var == "ku_trm":
+                            # if max(states) > 2**bits:
+                            if (
+                                max(states)
+                                > self.trigger_states[
+                                    (self.role_var.get(), self.module_type_var.get())
+                                ][1]
+                            ) and (
+                                min(states)
+                                < self.trigger_states[
+                                    (self.role_var.get(), self.module_type_var.get())
+                                ][0]
+                            ):
+                                self.log_threadsafe(
+                                    "[ERROR] CSV has a state greater than the number of states",
+                                    "error",
+                                )
+                                return
 
                         for state in states:
                             if self.cancel_event.is_set():
@@ -1311,11 +1383,46 @@ class MackIITMGUI:
                 try:
                     n = int(self.n_entry.get())
                     state = int(self.state_entry.get())
-                    if state >= 2**n:
-                        self.log_threadsafe(
-                            f"[ERROR] Invalid: State exceeds 2^{n}", "error"
-                        )
-                        return
+
+                    if self.device_type_var == "phase_shifter":
+                        if state >= 2**bits:
+                            self.log_threadsafe(
+                                f"[ERROR] Invalid: State exceeds 2^{n}", "error"
+                            )
+                            return
+
+                    elif self.device_type_var == "ku_trm":
+                        # if max(states) > 2**bits:
+                        if (
+                            state
+                            > self.trigger_states[
+                                (self.role_var.get(), self.module_type_var.get())
+                            ][1]
+                        ) and (
+                            state
+                            < self.trigger_states[
+                                (self.role_var.get(), self.module_type_var.get())
+                            ][0]
+                        ):
+                            self.log_threadsafe(
+                                f"[ERROR] Invalid: State needs to be within {
+                                    self.trigger_states[
+                                        (
+                                            self.role_var.get(),
+                                            self.module_type_var.get(),
+                                        )
+                                    ][0]
+                                } and {
+                                    self.trigger_states[
+                                        (
+                                            self.role_var.get(),
+                                            self.module_type_var.get(),
+                                        )
+                                    ][1]
+                                }",
+                                "error",
+                            )
+                            return
 
                     if self.cancel_event.is_set():
                         self.log_threadsafe(
@@ -1364,62 +1471,128 @@ class MackIITMGUI:
 
             elif mode == "all_states":
                 try:
-                    bits = int(self.bits_entry.get())
-                    states = int(self.states_entry.get())
-                    if states > 2**bits:
+                    if self.device_type_var == "phase_shifter":
+                        bits = int(self.bits_entry.get())
+                        states = int(self.states_entry.get())
+                        if states > 2**bits:
+                            self.log_threadsafe(
+                                f"[ERROR] Invalid: Max states is {2**bits}", "error"
+                            )
+                            return
+
                         self.log_threadsafe(
-                            f"[ERROR] Invalid: Max states is {2**bits}", "error"
+                            f"All states mode: {states} states for {bits}-bit", "info"
                         )
-                        return
 
-                    self.log_threadsafe(
-                        f"All states mode: {states} states for {bits}-bit", "info"
-                    )
+                        for state in range(states):
+                            if self.cancel_event.is_set():
+                                self.log_threadsafe(
+                                    "[CANCELLED] Test was cancelled.", "warning"
+                                )
+                                return
 
-                    for state in range(states):
-                        if self.cancel_event.is_set():
+                            while self.pause_event.is_set():
+                                time.sleep(0.1)
+                            if self.cancel_event.is_set():
+                                self.log_threadsafe(
+                                    "[CANCELLED] Test was cancelled.", "warning"
+                                )
+                                return
+
+                            if not self.fpga.trigger_state(state):
+                                self.log_threadsafe(
+                                    "[ERROR] FPGA communication failed. Please make sure FPGA is connected and all applications using the port are closed",
+                                    "error",
+                                )
+                                return
+
                             self.log_threadsafe(
-                                "[CANCELLED] Test was cancelled.", "warning"
+                                f"[TRIGGER] Triggered state {state}", "success"
                             )
-                            return
 
-                        while self.pause_event.is_set():
-                            time.sleep(0.1)
-                        if self.cancel_event.is_set():
-                            self.log_threadsafe(
-                                "[CANCELLED] Test was cancelled.", "warning"
+                            while self.pause_event.is_set():
+                                time.sleep(0.1)
+                            if self.cancel_event.is_set():
+                                self.log_threadsafe(
+                                    "[CANCELLED] Test was cancelled.", "warning"
+                                )
+                                return
+
+                            time.sleep(self.delay)
+                            self.vna.save_traces(
+                                state, folder_name, self.start_freq, self.stop_freq
                             )
-                            return
-
-                        if not self.fpga.trigger_state(state):
                             self.log_threadsafe(
-                                "[ERROR] FPGA communication failed. Please make sure FPGA is connected and all applications using the port are closed",
+                                f"Saved measurement for state {state}", "success"
+                            )
+
+                        self.log_threadsafe("Test completed", "success")
+                        self.vna.reset_indices()
+
+                    elif self.device_type_var == "ku_trm":
+                        bits = int(self.bits_entry.get())
+                        states = int(self.states_entry.get())
+
+                        start = self.trigger_states[
+                            (self.role_var.get(), self.module_type_var.get())
+                        ][0]
+                        end = self.trigger_states[
+                            (self.role_var.get(), self.module_type_var.get())
+                        ][1]
+
+                        valid_states_range = end - start
+
+                        if valid_states_range < states:
+                            self.log_threadsafe(
+                                "[ERROR] States entered higher than valid range.",
                                 "error",
                             )
                             return
 
-                        self.log_threadsafe(
-                            f"[TRIGGER] Triggered state {state}", "success"
-                        )
+                        for state in range(start, start + states):
+                            if self.cancel_event.is_set():
+                                self.log_threadsafe(
+                                    "[CANCELLED] Test was cancelled.", "warning"
+                                )
+                                return
 
-                        while self.pause_event.is_set():
-                            time.sleep(0.1)
-                        if self.cancel_event.is_set():
+                            while self.pause_event.is_set():
+                                time.sleep(0.1)
+                            if self.cancel_event.is_set():
+                                self.log_threadsafe(
+                                    "[CANCELLED] Test was cancelled.", "warning"
+                                )
+                                return
+
+                            if not self.fpga.trigger_state(state):
+                                self.log_threadsafe(
+                                    "[ERROR] FPGA communication failed. Please make sure FPGA is connected and all applications using the port are closed",
+                                    "error",
+                                )
+                                return
+
                             self.log_threadsafe(
-                                "[CANCELLED] Test was cancelled.", "warning"
+                                f"[TRIGGER] Triggered state {state}", "success"
                             )
-                            return
 
-                        time.sleep(self.delay)
-                        self.vna.save_traces(
-                            state, folder_name, self.start_freq, self.stop_freq
-                        )
-                        self.log_threadsafe(
-                            f"Saved measurement for state {state}", "success"
-                        )
+                            while self.pause_event.is_set():
+                                time.sleep(0.1)
+                            if self.cancel_event.is_set():
+                                self.log_threadsafe(
+                                    "[CANCELLED] Test was cancelled.", "warning"
+                                )
+                                return
 
-                    self.log_threadsafe("Test completed", "success")
-                    self.vna.reset_indices()
+                            time.sleep(self.delay)
+                            self.vna.save_traces(
+                                state, folder_name, self.start_freq, self.stop_freq
+                            )
+                            self.log_threadsafe(
+                                f"Saved measurement for state {state}", "success"
+                            )
+
+                        self.log_threadsafe("Test completed", "success")
+                        self.vna.reset_indices()
                 except ValueError:
                     self.log_threadsafe("[ERROR] Invalid value added", "error")
 
@@ -1428,14 +1601,6 @@ class MackIITMGUI:
             self.cancel_event.clear()
             self.test_running = False
             self.vna.reset_indices()
-
-    def log(self, message, tag="info"):
-        timestamp = datetime.datetime.now().strftime("[%H:%M:%S] ")
-        self.output_box.configure(state="normal")
-        self.output_box.insert("end", timestamp, "timestamp")
-        self.output_box.insert("end", message + "\n", tag)
-        self.output_box.see("end")
-        self.output_box.configure(state="disabled")
 
     def pause_test(self):
         if self.test_running:
