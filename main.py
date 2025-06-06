@@ -35,6 +35,7 @@ class MackIITMGUI:
         self.test_running = False
 
         self.phase_file_path = ""
+        self.amp_file_path = ""
         self.analysis_save_path = ""
 
         self.title_label = ttk.Label(
@@ -196,6 +197,7 @@ class MackIITMGUI:
     def run_analysis(self):
         # Validate required fields
         equibits = self.equibits_entry.get().strip()
+        amp_analysis = True
         if not equibits.isdigit():
             self.log("[ERROR] Equibits must be a positive integer.", "error")
             return
@@ -205,8 +207,7 @@ class MackIITMGUI:
             return
 
         if not self.amp_file_path:
-            self.log("[ERROR] Please upload a amplitude CSV file.", "error")
-            return
+            amp_analysis = False
 
         if not self.analysis_save_path:
             self.log("[ERROR] Please select a save location.", "error")
@@ -221,12 +222,14 @@ class MackIITMGUI:
             index_col=0,
         )
 
-        amp_data = pd.read_csv(
-            # "/home/ganther/Hithesh/Projects/MACK/VNA_automation/results/measurements with report/15.5-17.5_Trc3.csv",
-            # "/home/ganther/Hithesh/Projects/MACK/VNA_automation/results/measurement 201 points/15.5-17.5_Trc6.csv",
-            self.amp_file_path,
-            index_col=0,
-        )
+        if amp_analysis:
+            amp_data = pd.read_csv(
+                # "/home/ganther/Hithesh/Projects/MACK/VNA_automation/results/measurements with report/15.5-17.5_Trc3.csv",
+                # "/home/ganther/Hithesh/Projects/MACK/VNA_automation/results/measurement 201 points/15.5-17.5_Trc6.csv",
+                self.amp_file_path,
+                index_col=0,
+            )
+            re_arr_amp = amp_data.copy()
 
         equi_bits = int(self.equibits_entry.get())
 
@@ -270,16 +273,16 @@ class MackIITMGUI:
         rmse_values = {}
         max_min_errors = {}
         ideal_df = pd.DataFrame(ideal)
-        re_arr_amp = amp_data.copy()
 
         for i, column in enumerate(base_data.columns):
             print(f"Processing column: {column}")
 
             # Process the column
             fixed, ocol = process_it(base_data[column])
-            for j, col in enumerate(ocol):
-                print(col)
-                re_arr_amp.iloc[j, i] = amp_data.iloc[col - 1, i]
+            if amp_analysis:
+                for j, col in enumerate(ocol):
+                    print(col)
+                    re_arr_amp.iloc[j, i] = amp_data.iloc[col - 1, i]
 
             # Calculate RMSE
             diff = ideal_df - fixed
@@ -333,7 +336,8 @@ class MackIITMGUI:
             pd.Series(rmse_values).to_excel(writer, sheet_name="RMS")
             # re_arranged_df.to_excel(writer, sheet_name="re_arranged")
 
-        re_arr_amp.to_excel(f"{self.analysis_save_path}/AMP_{equi_bits}.xlsx")
+        if amp_analysis:
+            re_arr_amp.to_excel(f"{self.analysis_save_path}/AMP_{equi_bits}.xlsx")
 
         self.log(f"Equibits: {equibits}", "info")
         self.log(f"Phase file: {os.path.basename(self.phase_file_path)}", "info")
