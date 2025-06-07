@@ -106,55 +106,62 @@ class MackIITMGUI:
 
         # Analysis Tab Content
         analysis_container = ttk.Frame(self.analysis_tab)
-        analysis_container.pack(pady=20, padx=20, fill="x")
+        analysis_container.pack(fill="both", expand=True)
 
-        ttk.Label(analysis_container, text="Equibits", font=("Arial", 10)).pack(
-            anchor="w"
+        # Inner frame for centering content
+        inner_frame = ttk.Frame(analysis_container)
+        inner_frame.pack(anchor="center", pady=20)
+
+        # Row 0: Equibits label and entry
+        ttk.Label(inner_frame, text="Equibits", font=("Arial", 10)).grid(
+            row=0, column=0, sticky="w", padx=(0, 10), pady=5
         )
-        self.equibits_entry = ttk.Entry(analysis_container, width=40)
-        self.equibits_entry.pack(pady=5)
+        self.equibits_entry = ttk.Entry(inner_frame, width=40)
+        self.equibits_entry.grid(row=0, column=1, sticky="ew", pady=5)
 
+        # Row 1: Upload Phase CSV Button
         ttk.Button(
-            analysis_container, text="Upload Phase CSV", command=self.upload_phase_csv
-        ).pack(pady=5)
+            inner_frame, text="Upload Phase CSV", command=self.upload_phase_csv
+        ).grid(row=1, column=0, columnspan=2, sticky="ew", pady=5)
 
+        # Row 2: Phase file label
         self.phase_csv_label = ttk.Label(
-            analysis_container,
+            inner_frame,
             text="No phase file selected",
             font=("Arial", 9, "italic"),
         )
-        self.phase_csv_label.pack(pady=2)
+        self.phase_csv_label.grid(row=2, column=0, columnspan=2, sticky="w", pady=2)
 
+        # Row 3: Upload Amplitude CSV Button
         ttk.Button(
-            analysis_container,
-            text="Upload Amplitude CSV",
-            command=self.upload_amp_csv,
-        ).pack(pady=5)
+            inner_frame, text="Upload Amplitude CSV", command=self.upload_amp_csv
+        ).grid(row=3, column=0, columnspan=2, sticky="ew", pady=5)
 
+        # Row 4: Amplitude file label
         self.amp_csv_label = ttk.Label(
-            analysis_container,
+            inner_frame,
             text="No amplitude file selected",
             font=("Arial", 9, "italic"),
         )
-        self.amp_csv_label.pack(pady=2)
+        self.amp_csv_label.grid(row=4, column=0, columnspan=2, sticky="w", pady=2)
 
-        # Changed from amplitude files to save location
+        # Row 5: Select save location button
         ttk.Button(
-            analysis_container,
-            text="Select Save Location",
-            command=self.select_save_location,
-        ).pack(pady=5)
+            inner_frame, text="Select Save Location", command=self.select_save_location
+        ).grid(row=5, column=0, columnspan=2, sticky="ew", pady=5)
 
+        # Row 6: Save location label
         self.save_location_label = ttk.Label(
-            analysis_container,
+            inner_frame,
             text="No save location selected",
             font=("Arial", 9, "italic"),
         )
-        self.save_location_label.pack(pady=2)
+        self.save_location_label.grid(row=6, column=0, columnspan=2, sticky="w", pady=2)
 
-        ttk.Button(
-            analysis_container, text="Run Analysis", command=self.run_analysis
-        ).pack(pady=15)
+        # Row 7: Run analysis button
+        ttk.Button(inner_frame, text="Run Analysis", command=self.run_analysis).grid(
+            row=7, column=0, columnspan=2, sticky="ew", pady=15
+        )
 
     def upload_amp_csv(self):
         file_path = filedialog.askopenfilename(filetypes=[("CSV files", "*.csv")])
@@ -1137,6 +1144,9 @@ class MackIITMGUI:
 
         if self.vna.connected:
             self.log_threadsafe("VNA Successfully Connected", "success")
+            self.log_threadsafe(
+                f"Connected to a {self.vna.get_vendor_name()} VNA", "success"
+            )
 
             self.vna_connect_button.state(["disabled"])
 
