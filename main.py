@@ -203,155 +203,162 @@ class MackIITMGUI:
 
     def run_analysis(self):
         # Validate required fields
-        equibits = self.equibits_entry.get().strip()
-        amp_analysis = True
-        if not equibits.isdigit():
-            self.log("[ERROR] Equibits must be a positive integer.", "error")
-            return
+        try:
+            equibits = self.equibits_entry.get().strip()
+            amp_analysis = True
+            if not equibits.isdigit():
+                self.log("[ERROR] Equibits must be a positive integer.", "error")
+                return
 
-        if not self.phase_file_path:
-            self.log("[ERROR] Please upload a phase CSV file.", "error")
-            return
+            if not self.phase_file_path:
+                self.log("[ERROR] Please upload a phase CSV file.", "error")
+                return
 
-        if not self.amp_file_path:
-            amp_analysis = False
+            if not self.amp_file_path:
+                amp_analysis = False
 
-        if not self.analysis_save_path:
-            self.log("[ERROR] Please select a save location.", "error")
-            return
+            if not self.analysis_save_path:
+                self.log("[ERROR] Please select a save location.", "error")
+                return
 
-        self.log("[INFO] Starting analysis...", "info")
+            self.log("[INFO] Starting analysis...", "info")
 
-        trace_data = pd.read_csv(
-            # "/home/ganther/Hithesh/Projects/MACK/VNA_automation/results/measurements with report/15.5-17.5_Trc3.csv",
-            # "/home/ganther/Hithesh/Projects/MACK/VNA_automation/results/measurement 201 points/15.5-17.5_Trc6.csv",
-            self.phase_file_path,
-            index_col=0,
-        )
-
-        if amp_analysis:
-            amp_data = pd.read_csv(
+            trace_data = pd.read_csv(
                 # "/home/ganther/Hithesh/Projects/MACK/VNA_automation/results/measurements with report/15.5-17.5_Trc3.csv",
                 # "/home/ganther/Hithesh/Projects/MACK/VNA_automation/results/measurement 201 points/15.5-17.5_Trc6.csv",
-                self.amp_file_path,
+                self.phase_file_path,
                 index_col=0,
             )
-            re_arr_amp = amp_data.copy()
 
-        equi_bits = int(self.equibits_entry.get())
-
-        # Adjust phase relative to first value
-        base_data = trace_data - trace_data.iloc[0]
-        base_data = base_data.where(base_data >= 0, base_data + 360)
-        base_data.to_excel(
-            f"{self.analysis_save_path}/Analysis_{equi_bits}.xlsx",
-            sheet_name="positive_converted",
-        )
-
-        # Ideal reference values
-        one_angle = 360 / 2**equi_bits
-        ideal = [i * one_angle for i in range(2**equi_bits)]  # C in MATLAB
-
-        def process_it(bd):
-            C = np.array(ideal)
-            Array4_column = np.array(bd)
-            z = []
-            O_column = []
-
-            for k in range(len(C)):
-                z1 = C[k] - Array4_column
-                min_abs_diff = np.min(np.abs(z1))
-                z.append(min_abs_diff)
-                indices_with_min = np.where(np.abs(z1) == min_abs_diff)[0]
-                min_index = np.min(indices_with_min)
-                # MATLAB is 1-based indexing
-                O_column.append(int(min_index) + 1)
-
-            re_arr = list()
-            for i in O_column:
-                re_arr.append(bd.iloc[i - 1])
-
-            print(f"Max z: {max(z)}, Min z: {min(z)}")
-            print(O_column)
-            return pd.DataFrame(re_arr), O_column
-
-        # Method 1: Process all columns and store re_arranged in a dictionary
-        re_arranged = {}
-        rmse_values = {}
-        max_min_errors = {}
-        ideal_df = pd.DataFrame(ideal)
-
-        for i, column in enumerate(base_data.columns):
-            print(f"Processing column: {column}")
-
-            # Process the column
-            fixed, ocol = process_it(base_data[column])
             if amp_analysis:
-                for j, col in enumerate(ocol):
-                    print(col)
-                    re_arr_amp.iloc[j, i] = amp_data.iloc[col - 1, i]
+                amp_data = pd.read_csv(
+                    # "/home/ganther/Hithesh/Projects/MACK/VNA_automation/results/measurements with report/15.5-17.5_Trc3.csv",
+                    # "/home/ganther/Hithesh/Projects/MACK/VNA_automation/results/measurement 201 points/15.5-17.5_Trc6.csv",
+                    self.amp_file_path,
+                    index_col=0,
+                )
+                re_arr_amp = amp_data.copy()
 
-            # Calculate RMSE
-            diff = ideal_df - fixed
-            diff_squared = diff**2
-            avg = diff_squared.values.mean()
-            rmse = math.sqrt(avg)
+            equi_bits = int(self.equibits_entry.get())
 
-            # Store re_arranged
-            re_arranged[column] = fixed.iloc[
-                :, 0
-            ].values  # Extract the series from DataFrame
-            rmse_values[column] = rmse
-            max_min_errors[column] = {
-                "max_error": diff.max()[0],
-                "min_error": diff.min()[0],
-            }
+            # Adjust phase relative to first value
+            base_data = trace_data - trace_data.iloc[0]
+            base_data = base_data.where(base_data >= 0, base_data + 360)
+            base_data.to_excel(
+                f"{self.analysis_save_path}/Analysis_{equi_bits}.xlsx",
+                sheet_name="positive_converted",
+            )
 
-            print(f"RMSE for {column}: {rmse}")
-            print("-" * 50)
+            # Ideal reference values
+            one_angle = 360 / 2**equi_bits
+            ideal = [i * one_angle for i in range(2**equi_bits)]  # C in MATLAB
 
-        max_rms_min = {}
+            def process_it(bd):
+                C = np.array(ideal)
+                Array4_column = np.array(bd)
+                z = []
+                O_column = []
 
-        for col in rmse_values.keys():
-            max_rms_min[col] = [
-                max_min_errors[col]["max_error"],
-                rmse_values[col],
-                max_min_errors[col]["min_error"],
-            ]
+                for k in range(len(C)):
+                    z1 = C[k] - Array4_column
+                    min_abs_diff = np.min(np.abs(z1))
+                    z.append(min_abs_diff)
+                    indices_with_min = np.where(np.abs(z1) == min_abs_diff)[0]
+                    min_index = np.min(indices_with_min)
+                    # MATLAB is 1-based indexing
+                    O_column.append(int(min_index) + 1)
 
-        max_rms_min_df = pd.DataFrame(max_rms_min)
-        max_rms_min_df.to_excel(
-            f"{self.analysis_save_path}/PS_MAX_RMS_MIN_{equi_bits}.xlsx"
-        )
-        re_arranged_df = pd.DataFrame(re_arranged)
+                re_arr = list()
+                for i in O_column:
+                    re_arr.append(bd.iloc[i - 1])
 
-        with pd.ExcelWriter(
-            f"{self.analysis_save_path}/Analysis_{equi_bits}.xlsx",
-            engine="openpyxl",
-            mode="a",
-            if_sheet_exists="replace",
-        ) as writer:
-            re_arranged_df.to_excel(writer, sheet_name="re_arranged")
+                print(f"Max z: {max(z)}, Min z: {min(z)}")
+                print(O_column)
+                return pd.DataFrame(re_arr), O_column
 
-        with pd.ExcelWriter(
-            f"{self.analysis_save_path}/PS_MAX_RMS_MIN_{equi_bits}.xlsx",
-            engine="openpyxl",
-            mode="a",
-            if_sheet_exists="replace",
-        ) as writer:
-            # pd.DataFrame(rmse_values).to_excel(writer, sheet_name="RMS")
-            pd.Series(rmse_values).to_excel(writer, sheet_name="RMS")
-            # re_arranged_df.to_excel(writer, sheet_name="re_arranged")
+            # Method 1: Process all columns and store re_arranged in a dictionary
+            re_arranged = {}
+            rmse_values = {}
+            max_min_errors = {}
+            ideal_df = pd.DataFrame(ideal)
 
-        if amp_analysis:
-            re_arr_amp.to_excel(f"{self.analysis_save_path}/AMP_{equi_bits}.xlsx")
+            for i, column in enumerate(base_data.columns):
+                print(f"Processing column: {column}")
 
-        self.log(f"Equibits: {equibits}", "info")
-        self.log(f"Phase file: {os.path.basename(self.phase_file_path)}", "info")
-        self.log(f"Save location: {self.analysis_save_path}", "info")
+                # Process the column
+                fixed, ocol = process_it(base_data[column])
+                if amp_analysis:
+                    for j, col in enumerate(ocol):
+                        print(col)
+                        re_arr_amp.iloc[j, i] = amp_data.iloc[col - 1, i]
 
-        # Here you would implement your analysis logic
-        self.log("[INFO] Analysis completed successfully!", "success")
+                # Calculate RMSE
+                diff = ideal_df - fixed
+                diff_squared = diff**2
+                avg = diff_squared.values.mean()
+                rmse = math.sqrt(avg)
+
+                # Store re_arranged
+                re_arranged[column] = fixed.iloc[
+                    :, 0
+                ].values  # Extract the series from DataFrame
+                rmse_values[column] = rmse
+                max_min_errors[column] = {
+                    "max_error": diff.max()[0],
+                    "min_error": diff.min()[0],
+                }
+
+                print(f"RMSE for {column}: {rmse}")
+                print("-" * 50)
+
+            max_rms_min = {}
+
+            for col in rmse_values.keys():
+                max_rms_min[col] = [
+                    max_min_errors[col]["max_error"],
+                    rmse_values[col],
+                    max_min_errors[col]["min_error"],
+                ]
+
+            max_rms_min_df = pd.DataFrame(max_rms_min)
+            max_rms_min_df.to_excel(
+                f"{self.analysis_save_path}/PS_MAX_RMS_MIN_{equi_bits}.xlsx"
+            )
+            re_arranged_df = pd.DataFrame(re_arranged)
+
+            with pd.ExcelWriter(
+                f"{self.analysis_save_path}/Analysis_{equi_bits}.xlsx",
+                engine="openpyxl",
+                mode="a",
+                if_sheet_exists="replace",
+            ) as writer:
+                re_arranged_df.to_excel(writer, sheet_name="re_arranged")
+
+            with pd.ExcelWriter(
+                f"{self.analysis_save_path}/PS_MAX_RMS_MIN_{equi_bits}.xlsx",
+                engine="openpyxl",
+                mode="a",
+                if_sheet_exists="replace",
+            ) as writer:
+                # pd.DataFrame(rmse_values).to_excel(writer, sheet_name="RMS")
+                pd.Series(rmse_values).to_excel(writer, sheet_name="RMS")
+                # re_arranged_df.to_excel(writer, sheet_name="re_arranged")
+
+            if amp_analysis:
+                re_arr_amp.to_excel(f"{self.analysis_save_path}/AMP_{equi_bits}.xlsx")
+
+            self.log(f"Equibits: {equibits}", "info")
+            self.log(f"Phase file: {os.path.basename(self.phase_file_path)}", "info")
+            self.log(f"Save location: {self.analysis_save_path}", "info")
+
+            # Here you would implement your analysis logic
+            self.log("[INFO] Analysis completed successfully!", "success")
+        except Exception as e:
+            self.log(
+                "[ERROR] System crashed while analyzing. Please ensure the correct files are added.",
+                "error",
+            )
+            self.log(f"{e}", "error")
 
     def create_console(self):
         # Console shared by both tabs
