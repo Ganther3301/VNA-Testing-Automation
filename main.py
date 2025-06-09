@@ -488,7 +488,7 @@ class MackIITMGUI:
         # Path selection section
         ttk.Label(
             frame_content,
-            text="Calibration Save Path:",
+            text="Save Path:",
             font=("TkDefaultFont", 10, "bold"),
         ).grid(row=0, column=0, columnspan=3, sticky="w", pady=(0, 10))
 
@@ -626,10 +626,10 @@ class MackIITMGUI:
             frame_content.columnconfigure(i, weight=1)
 
         self.start_freq_entry = self.add_labeled_entry(
-            frame_content, "Start Frequency", 1, 0
+            frame_content, "Start Frequency (GHz)", 1, 0
         )
         self.stop_freq_entry = self.add_labeled_entry(
-            frame_content, "Stop Frequency", 1, 2
+            frame_content, "Stop Frequency (GHz)", 1, 2
         )
 
         self.start_freq_entry.bind("<KeyRelease>", self.hide_frame3_on_change)
@@ -701,10 +701,10 @@ class MackIITMGUI:
 
         # Frequency and measurement parameters
         self.config_start_freq_entry = self.add_labeled_entry(
-            frame_content, "Sweep Start Frequency", 0, 0
+            frame_content, "Sweep Start Frequency (GHz)", 0, 0
         )
         self.config_stop_freq_entry = self.add_labeled_entry(
-            frame_content, "Sweep Stop Frequency", 0, 2
+            frame_content, "Sweep Stop Frequency (GHz)", 0, 2
         )
         self.config_average_entry = self.add_labeled_entry(
             frame_content, "Average", 0, 4
@@ -774,6 +774,8 @@ class MackIITMGUI:
 
         # Show only the config frame
         self.config_frame.pack(fill="x", pady=10)
+        self.device_type_var.set("")
+        self.connect_button.state(["!disabled"])
 
     def load_config(self):
         """Load configuration from a JSON file and populate the form fields"""
