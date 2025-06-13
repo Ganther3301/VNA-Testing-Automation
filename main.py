@@ -16,7 +16,7 @@ from vna import VNA
 
 class MackIITMGUI:
     def __init__(self, root):
-        self.delay = 2  # Default delay in seconds
+        self.delay = 0  # Default delay in seconds
 
         self.root = root
         self.root.title("MACK IITM TESTING SYSTEM")
@@ -53,10 +53,10 @@ class MackIITMGUI:
         self.cancel_event = threading.Event()
 
         self.trigger_states = {
-            ("Receiver", "Phase Shifter"): (0, 128),
-            ("Receiver", "Attenuator"): (0, 128),
-            ("Transmitter", "Phase Shifter"): (0, 128),
-            ("Transmitter", "Attenuator"): (0, 128),
+            ("Transmitter", "Phase Shifter"): (0, 127),
+            ("Transmitter", "Attenuator"): (128, 383),
+            ("Receiver", "Phase Shifter"): (384, 511),
+            ("Receiver", "Attenuator"): (512, 767),
         }
 
     def create_widgets(self):
@@ -667,7 +667,7 @@ class MackIITMGUI:
         self.delay_entry = ttk.Entry(delay_frame, width=5)
         self.delay_entry.pack(side="left")
         self.delay_entry.insert(0, str(self.delay))  # Set default value
-        self.delay_entry.bind("<KeyRelease>", self.update_delay)
+        # self.delay_entry.bind("<KeyRelease>", self.update_delay)
 
         self.mode_container = ttk.Frame(self.frame3)
         self.mode_container.pack(fill="x", expand=True, pady=5)
@@ -1068,18 +1068,15 @@ class MackIITMGUI:
         """Update delay value when user changes the entry"""
         try:
             new_delay = float(self.delay_entry.get())
-            if new_delay > 0:
-                self.delay = new_delay
-                self.log(f"Delay updated to {new_delay} seconds", "info")
-            else:
+            if new_delay < 0:
                 self.log("[WARNING] Delay must be positive", "warning")
                 self.delay_entry.delete(0, tk.END)
-                self.delay_entry.insert(0, str(self.delay))
+            else:
+                self.delay = new_delay
         except ValueError:
             # Restore previous value if input is not a valid number
             self.log("[ERROR] Invalid delay value", "error")
             self.delay_entry.delete(0, tk.END)
-            self.delay_entry.insert(0, str(self.delay))
 
     def setup_single_frame(self):
         container = ttk.Frame(self.single_frame)
@@ -1334,17 +1331,10 @@ class MackIITMGUI:
 
                         if self.device_type_var == "ku_trm":
                             # if max(states) > 2**bits:
-                            if (
-                                max(states)
-                                > self.trigger_states[
-                                    (self.role_var.get(), self.module_type_var.get())
-                                ][1]
-                            ) and (
-                                min(states)
-                                < self.trigger_states[
-                                    (self.role_var.get(), self.module_type_var.get())
-                                ][0]
-                            ):
+                            low, high = self.trigger_states[
+                                (self.role_var.get(), self.module_type_var.get())
+                            ]
+                            if (max(states) > high) and (min(states) < low):
                                 self.log_threadsafe(
                                     "[ERROR] CSV has a state greater than the number of states",
                                     "error",
@@ -1416,33 +1406,12 @@ class MackIITMGUI:
 
                     elif self.device_type_var == "ku_trm":
                         # if max(states) > 2**bits:
-                        if (
-                            state
-                            > self.trigger_states[
-                                (self.role_var.get(), self.module_type_var.get())
-                            ][1]
-                        ) and (
-                            state
-                            < self.trigger_states[
-                                (self.role_var.get(), self.module_type_var.get())
-                            ][0]
-                        ):
+                        low, high = self.trigger_states[
+                            (self.role_var.get(), self.module_type_var.get())
+                        ]
+                        if (state > high) and (state < low):
                             self.log_threadsafe(
-                                f"[ERROR] Invalid: State needs to be within {
-                                    self.trigger_states[
-                                        (
-                                            self.role_var.get(),
-                                            self.module_type_var.get(),
-                                        )
-                                    ][0]
-                                } and {
-                                    self.trigger_states[
-                                        (
-                                            self.role_var.get(),
-                                            self.module_type_var.get(),
-                                        )
-                                    ][1]
-                                }",
+                                f"[ERROR] Invalid: State needs to be within {low} and {high}",
                                 "error",
                             )
                             return
@@ -1556,14 +1525,11 @@ class MackIITMGUI:
                         bits = int(self.bits_entry.get())
                         states = int(self.states_entry.get())
 
-                        start = self.trigger_states[
+                        low, high = self.trigger_states[
                             (self.role_var.get(), self.module_type_var.get())
-                        ][0]
-                        end = self.trigger_states[
-                            (self.role_var.get(), self.module_type_var.get())
-                        ][1]
+                        ]
 
-                        valid_states_range = end - start
+                        valid_states_range = high - low
 
                         if valid_states_range < states:
                             self.log_threadsafe(
@@ -1572,7 +1538,7 @@ class MackIITMGUI:
                             )
                             return
 
-                        for state in range(start, start + states):
+                        for state in range(low, low + states + 1):
                             if self.cancel_event.is_set():
                                 self.log_threadsafe(
                                     "[CANCELLED] Test was cancelled.", "warning"
