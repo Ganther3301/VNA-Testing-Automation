@@ -667,7 +667,7 @@ class MackIITMGUI:
         self.delay_entry = ttk.Entry(delay_frame, width=5)
         self.delay_entry.pack(side="left")
         self.delay_entry.insert(0, str(self.delay))  # Set default value
-        # self.delay_entry.bind("<KeyRelease>", self.update_delay)
+        self.delay_entry.bind("<KeyRelease>", self.update_delay)
 
         self.mode_container = ttk.Frame(self.frame3)
         self.mode_container.pack(fill="x", expand=True, pady=5)
@@ -1321,7 +1321,7 @@ class MackIITMGUI:
                             return
                         bits = int(self.n_bits_entry.get())
 
-                        if self.device_type_var == "phase_shifter":
+                        if self.device_type_var.get() == "phase_shifter":
                             if max(states) > 2**bits:
                                 self.log_threadsafe(
                                     "[ERROR] CSV has a state greater than the number of states",
@@ -1329,7 +1329,7 @@ class MackIITMGUI:
                                 )
                                 return
 
-                        if self.device_type_var == "ku_trm":
+                        if self.device_type_var.get() == "ku_trm":
                             # if max(states) > 2**bits:
                             low, high = self.trigger_states[
                                 (self.role_var.get(), self.module_type_var.get())
@@ -1397,14 +1397,14 @@ class MackIITMGUI:
                     n = int(self.n_entry.get())
                     state = int(self.state_entry.get())
 
-                    if self.device_type_var == "phase_shifter":
+                    if self.device_type_var.get() == "phase_shifter":
                         if state >= 2**bits:
                             self.log_threadsafe(
                                 f"[ERROR] Invalid: State exceeds 2^{n}", "error"
                             )
                             return
 
-                    elif self.device_type_var == "ku_trm":
+                    elif self.device_type_var.get() == "ku_trm":
                         # if max(states) > 2**bits:
                         low, high = self.trigger_states[
                             (self.role_var.get(), self.module_type_var.get())
@@ -1463,7 +1463,7 @@ class MackIITMGUI:
 
             elif mode == "all_states":
                 try:
-                    if self.device_type_var == "phase_shifter":
+                    if self.device_type_var.get() == "phase_shifter":
                         bits = int(self.bits_entry.get())
                         states = int(self.states_entry.get())
                         if states > 2**bits:
@@ -1521,7 +1521,7 @@ class MackIITMGUI:
                         self.log_threadsafe("Test completed", "success")
                         self.vna.reset_indices()
 
-                    elif self.device_type_var == "ku_trm":
+                    elif self.device_type_var.get() == "ku_trm":
                         bits = int(self.bits_entry.get())
                         states = int(self.states_entry.get())
 
