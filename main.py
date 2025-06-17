@@ -1158,6 +1158,7 @@ class MackIITMGUI:
 
             if self.vna.get_vendor_name() == "Keysight":
                 self.vna.write_command("INIT:CONT ON")
+                self.vna.write_command("SENS:AVER ON")
                 self.config_frame.pack(fill="x", pady=10)
             else:
                 # self.config_frame.pack(fill="x", pady=10)  # TODO: comment this
@@ -1189,6 +1190,7 @@ class MackIITMGUI:
 
         if self.vna.get_vendor_name() == "Keysight":
             self.vna.write_command("INIT:CONT ON")
+            self.vna.write_command("SENS:AVER ON")
 
         if self.device_type in ["phase_shifter", "ku_trm"]:
             if self.device_type == "ku_trm":
