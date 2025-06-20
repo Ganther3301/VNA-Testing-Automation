@@ -700,13 +700,11 @@ class MackIITMGUI:
         frame_content = ttk.Frame(self.config_frame)
         frame_content.pack(fill="x", expand=True, padx=10, pady=10)
 
-        # Configure grid weights
         for i in range(6):
             frame_content.columnconfigure(i, weight=1)
-        for i in range(8):  # Increased rows for additional content
+        for i in range(8):
             frame_content.rowconfigure(i, weight=1)
 
-        # Frequency and measurement parameters
         self.config_start_freq_entry = self.add_labeled_entry(
             frame_content, "Sweep Start Frequency (GHz)", 0, 0
         )
@@ -720,9 +718,28 @@ class MackIITMGUI:
             frame_content, "Sweep Points", 1, 0
         )
 
-        # Port selection with number fields
-        port_frame = ttk.LabelFrame(frame_content, text="Port Configuration")
-        port_frame.grid(row=2, column=0, columnspan=6, sticky="ew", pady=10)
+        # Create Traces? Dropdown
+        ttk.Label(frame_content, text="Create Traces?").grid(
+            row=2, column=0, sticky="w", padx=5, pady=5
+        )
+        self.create_traces_var = tk.StringVar(value="No")
+        create_traces_menu = ttk.Combobox(
+            frame_content,
+            textvariable=self.create_traces_var,
+            values=["Yes", "No"],
+            state="readonly",
+        )
+        create_traces_menu.grid(row=2, column=1, sticky="w", padx=5, pady=5)
+        create_traces_menu.bind(
+            "<<ComboboxSelected>>", lambda e: self.toggle_trace_config()
+        )
+
+        # Trace configuration container
+        self.trace_config_frame = ttk.Frame(frame_content)
+        self.trace_config_frame.grid(row=3, column=0, columnspan=6, sticky="ew")
+
+        port_frame = ttk.LabelFrame(self.trace_config_frame, text="Port Configuration")
+        port_frame.grid(row=0, column=0, columnspan=6, sticky="ew", pady=10)
 
         ttk.Label(port_frame, text="Port 1:").grid(row=0, column=0, padx=5, pady=5)
         self.port1_var = tk.StringVar(value="1")
@@ -736,21 +753,16 @@ class MackIITMGUI:
         self.port2_entry.grid(row=0, column=3, padx=5, pady=5)
         self.port2_entry.bind("<KeyRelease>", self.update_sparams)
 
-        # Initialize port list
         self.port_vars = [self.port1_var, self.port2_var]
         self.port_entries = [self.port1_entry, self.port2_entry]
 
-        # S-parameter selection frame
-        self.sparams_frame = ttk.LabelFrame(frame_content, text="S-Parameters")
-        self.sparams_frame.grid(row=3, column=0, columnspan=6, sticky="ew", pady=10)
-
-        # Initialize S-parameter variables dictionary
+        self.sparams_frame = ttk.LabelFrame(
+            self.trace_config_frame, text="S-Parameters"
+        )
+        self.sparams_frame.grid(row=1, column=0, columnspan=6, sticky="ew", pady=10)
         self.sparam_vars = {}
-
-        # Create initial S-parameter checkboxes
         self.update_sparams()
 
-        # Buttons
         button_frame = ttk.Frame(frame_content)
         button_frame.grid(row=4, column=0, columnspan=6, pady=10)
 
@@ -766,6 +778,14 @@ class MackIITMGUI:
         self.load_config_button.pack(side="left", padx=10)
         self.setup_config_button.pack(side="left", padx=10)
         self.skip_button.pack(side="left", padx=10)
+
+        self.toggle_trace_config()  # Initial hide/show based on default
+
+    def toggle_trace_config(self):
+        if self.create_traces_var.get() == "Yes":
+            self.trace_config_frame.grid()
+        else:
+            self.trace_config_frame.grid_remove()
 
     def go_back_to_config(self):
         # Hide all frames in the testing tab
@@ -929,7 +949,7 @@ class MackIITMGUI:
                 port_val = port_var.get().strip()
                 if port_val:
                     ports.append(port_val)
-            except:
+            except Exception:
                 continue
 
         if len(ports) < 2:
@@ -1169,7 +1189,7 @@ class MackIITMGUI:
     def connect_devices(self):
         try:
             self.device_type
-        except:
+        except Exception:
             self.log_threadsafe("[ERROR] Select one of the options", "error")
             return
 
@@ -1219,6 +1239,7 @@ class MackIITMGUI:
             ):
                 self.start_freq = start_freq
                 self.stop_freq = stop_freq
+                self.config_button.state(["disabled"])
 
                 self.calib_frame.pack()
 
@@ -1270,6 +1291,7 @@ class MackIITMGUI:
                 pass  # Entry might not exist yet
 
         self.csv_label_var.set("No file selected")
+        self.config_button.state(["!disabled"])
         self.file_path = ""
 
     def upload_csv(self):
