@@ -65,7 +65,7 @@ class FPGA:
             with serial.Serial(self.port, self.baudrate, timeout=self.timeout) as ser:
                 ser.reset_input_buffer()
 
-                ser.write(bytes([state]))
+                ser.write(state.to_bytes(2, "big"))
                 ser.flush()
                 print(f"[UART] Triggered Din[{state}]")
 
